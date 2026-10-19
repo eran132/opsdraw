@@ -28,6 +28,30 @@ and can be generated from your infrastructure code or by an AI assistant over MC
 - **Cross-platform.** Runs in any modern browser today; a Windows/macOS/Linux desktop shell
   (Tauri) is planned.
 
+## Keep diagrams in sync with your infrastructure
+
+The `opsdraw` CLI imports infrastructure code into a diagram and keeps your hand-made layout on
+every re-import. In CI, `--check` fails when the committed diagram no longer matches the code:
+
+```yaml
+# .github/workflows/diagrams.yml
+on: pull_request
+jobs:
+  diagram:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: eran132/opsdraw@main
+        with:
+          source: infra
+          diagram: docs/architecture.mmd
+          recursive: true
+```
+
+Terraform and OpenTofu are read from source (`.tf`, `.tofu`, local modules, `count`/`for_each`)
+or, for exact results, from `terraform show -json` / `tofu show -json` plan or state output. See
+[packages/cli/README.md](packages/cli/README.md) for all commands.
+
 ## Example
 
 ```mermaid
@@ -73,6 +97,7 @@ See [packages/mcp/README.md](packages/mcp/README.md) for the full tool list and 
 | --------------- | ------------------------------------------------------------------------ |
 | `packages/core` | Diagram model, Mermaid parser/serializer, IaC importers, ELK auto-layout |
 | `packages/app`  | The editor (React, React Flow, CodeMirror, Mermaid)                      |
+| `packages/cli`  | The `opsdraw` command-line tool and GitHub Action                        |
 | `packages/mcp`  | The MCP server                                                           |
 
 ## Testing

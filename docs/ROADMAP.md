@@ -48,18 +48,19 @@ Legend: ✅ done · 🔜 next · 📋 planned
 - ✅ Virtualization via Terraform: Proxmox, VergeOS, vSphere, Xen Orchestra, Nutanix, oVirt,
   OpenStack, libvirt, LXD/Incus, Harvester, Rancher, Hyper-V, VirtualBox.
 - ✅ MCP `import_iac` with format detection and skipped-file reporting.
-- 🔜 **Plan/state JSON input** (`terraform show -json`): exact `count`/`for_each` expansion,
+- ✅ OpenTofu: `.tofu` files, with `foo.tofu` taking precedence over `foo.tf`.
+- ✅ **Plan/state JSON input** (`terraform show -json`): exact `count`/`for_each` expansion,
   modules and data sources (Rover's most requested feature, rover#20).
-- 🔜 **Modules:** recurse into local modules, read `.terraform/modules/modules.json`, show remote
+- ✅ **Modules:** recurse into local modules, read `.terraform/modules/modules.json`, show remote
   modules as collapsed groups instead of failing (Terravision #49, Blast Radius #85).
-- 🔜 **Resilience:** `count`/`for_each` shown as one node marked `×N`; partial diagrams plus a
+- ✅ **Resilience:** `count`/`for_each` shown as one node marked `×N`; partial diagrams plus a
   warnings list instead of aborting; an import summary of unknown types (Terravision #100, #206).
 - 📋 **Focus and filters:** collapse by module or group, `--focus <resource> --depth N`,
   include/exclude globs, configurable plumbing rules.
 - 📋 **Terragrunt units** and Terraform Cloud plans (Terravision #114, Rover #21/#34).
 - 📋 **Helm/Kustomize:** accept `helm template` / `kustomize build` output on stdin; Gateway API
   routes; namespace filter (KubeDiagrams #44/#54/#72).
-- 📋 **Drift checks in CI:** `opsdraw import … --check` exits non-zero when the committed
+- ✅ **Drift checks in CI:** `opsdraw import … --check` exits non-zero when the committed
   diagram is out of date, plus a GitHub Action (Pluralith #84, KubeDiagrams #21). Imports keep
   `%% @src` ids so re-imports update the diagram instead of replacing hand-made layout.
 
@@ -79,6 +80,6 @@ Legend: ✅ done · 🔜 next · 📋 planned
 ## Platform
 
 - 📋 **Desktop app (Tauri)** for Windows, macOS and Linux, with native file watching.
-- 📋 **CLI** (`opsdraw export`, `import`, `check`) sharing code with the MCP server.
+- ✅ **CLI** (`opsdraw export`, `import`, `check`) sharing code with the MCP server.
 - 📋 **Git merge driver** that resolves `@pos` conflicts, and a visual diff for pull requests.
 - 📋 **Real-time collaboration** later, through a CRDT on the text (Yjs + CodeMirror).
