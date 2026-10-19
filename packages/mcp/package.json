@@ -1,0 +1,30 @@
+{
+  "name": "archidraw-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for archidraw: create and edit Mermaid architecture diagrams, import Terraform.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "archidraw-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@iconify-json/lucide": "^1.2.146",
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "elkjs": "^0.12.0",
+    "yaml": "^2.9.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@archidraw/core": "0.1.0",
+    "@types/node": "^22.0.0",
+    "tsup": "^9.0.0"
+  }
+}

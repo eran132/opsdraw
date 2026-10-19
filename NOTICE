@@ -1,0 +1,13 @@
+archidraw
+Copyright 2026 The archidraw contributors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+It includes third-party software and artwork under their own licenses:
+- Lucide icons (ISC License), via @iconify-json/lucide — https://lucide.dev
+- Mermaid (MIT License) — https://mermaid.js.org
+- xyflow / React Flow (MIT License) — https://xyflow.com
+- ELK.js (Eclipse Public License 2.0) — https://github.com/kieler/elkjs
+- CodeMirror (MIT License) — https://codemirror.net
+
+No vendor (AWS, Microsoft Azure, Google Cloud, or other) icons are distributed with archidraw.

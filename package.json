@@ -1,0 +1,34 @@
+{
+  "name": "archidraw",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Architecture-as-code editor: Mermaid text and a visual canvas, kept in sync.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "workspaces": [
+    "packages/core",
+    "packages/app",
+    "packages/mcp"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @archidraw/app",
+    "build": "npm run build -w @archidraw/app && npm run build -w archidraw-mcp",
+    "test": "npm run test -w @archidraw/core && npm run test -w archidraw-mcp && npm run test -w @archidraw/app",
+    "test:e2e": "npm run test:e2e -w @archidraw/app",
+    "typecheck": "tsc -p packages/core && tsc -p packages/app && tsc -p packages/mcp",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.0",
+    "eslint": "^10.13.0",
+    "prettier": "^3.9.10",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.72.0",
+    "vitest": "^5.0.5"
+  },
+  "engines": {
+    "node": ">=20.19"
+  }
+}
