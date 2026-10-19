@@ -86,17 +86,17 @@ describe('cloudformation import', () => {
     const d = parseCloudFormation([{ path: 'stack.yaml', content: CFN }]);
     const n = byId(d);
     expect(Object.keys(n).sort()).toEqual(
-      ['Database', 'Jobs', 'PrivateSubnet', 'Uploads', 'Vpc', 'Worker', 'Workflow'].sort(),
+      ['database', 'jobs', 'private_subnet', 'uploads', 'vpc', 'worker', 'workflow'].sort(),
     );
-    expect(n.Vpc).toMatchObject({ kind: 'group' });
-    expect(n.PrivateSubnet).toMatchObject({ kind: 'group', parent: 'Vpc' });
-    expect(n.Worker).toMatchObject({ parent: 'PrivateSubnet', icon: 'lucide:square-function' });
+    expect(n.vpc).toMatchObject({ kind: 'group' });
+    expect(n.private_subnet).toMatchObject({ kind: 'group', parent: 'vpc' });
+    expect(n.worker).toMatchObject({ parent: 'private_subnet', icon: 'lucide:square-function' });
     // Nested through the hidden DB subnet group.
-    expect(n.Database).toMatchObject({ parent: 'PrivateSubnet', icon: 'database' });
-    expect(n.Jobs!.icon).toBe('lucide:list-ordered');
-    expect(n.Uploads!.icon).toBe('lucide:archive');
-    expect(n.Workflow!.icon).toBe('lucide:workflow');
-    expect(pairs(d)).toEqual(['Worker->Database', 'Worker->Jobs', 'Workflow->Worker']);
+    expect(n.database).toMatchObject({ parent: 'private_subnet', icon: 'database' });
+    expect(n.jobs!.icon).toBe('lucide:list-ordered');
+    expect(n.uploads!.icon).toBe('lucide:archive');
+    expect(n.workflow!.icon).toBe('lucide:workflow');
+    expect(pairs(d)).toEqual(['worker->database', 'worker->jobs', 'workflow->worker']);
     expectValidMermaid(d);
   });
 
@@ -112,8 +112,8 @@ describe('cloudformation import', () => {
       },
     });
     const d = parseCloudFormation([{ path: 'stack.json', content: json }]);
-    expect(d.nodes.map((n) => n.id).sort()).toEqual(['Queue', 'Topic']);
-    expect(pairs(d)).toEqual(['Queue->Topic']);
+    expect(d.nodes.map((n) => n.id).sort()).toEqual(['queue', 'topic']);
+    expect(pairs(d)).toEqual(['queue->topic']);
     const all = parseCloudFormation([{ path: 'stack.json', content: json }], { includeAll: true });
     expect(all.nodes).toHaveLength(3);
     expectValidMermaid(all);

@@ -1,5 +1,5 @@
 import type { ArchEdge, ArchNode, ParseError, ParseResult, Side } from './model';
-import { emptyDiagram } from './model';
+import { emptyDiagram, isValidId, makeId } from './model';
 
 /**
  * One-way import of a Mermaid flowchart (`flowchart` / `graph`) into an architecture diagram.
@@ -27,6 +27,18 @@ export function parseFlowchart(source: string): ParseResult {
   const diagram = emptyDiagram();
   const errors: ParseError[] = [];
   const nodes = new Map<string, ArchNode>();
+  // Flowchart ids like "LB" or "Backend" are fine in flowcharts but not in architecture diagrams
+  // (a leading uppercase T/B/L/R reads as an edge side), so they are mapped to safe ids.
+  const safeIds = new Map<string, string>();
+  const safe = (raw: string) => {
+    let id = safeIds.get(raw);
+    if (!id) {
+      const taken = new Set(safeIds.values());
+      id = isValidId(raw) && !taken.has(raw) ? raw : makeId(raw, taken);
+      safeIds.set(raw, id);
+    }
+    return id;
+  };
   const groupStack: string[] = [];
   let sides: [Side, Side] = SIDES.TD!;
   let sawHeader = false;
@@ -60,10 +72,11 @@ export function parseFlowchart(source: string): ParseResult {
       let id: string;
       let label: string;
       if (m) {
-        id = m[1]!;
+        id = safe(m[1]!);
         label = unquote(m[2]!);
       } else if (/^[A-Za-z_][\w-]*$/.test(sub[1]!.trim())) {
-        id = label = sub[1]!.trim();
+        label = sub[1]!.trim();
+        id = safe(label);
       } else {
         id = `group${++anonGroups}`;
         label = unquote(sub[1]!.trim());
@@ -137,14 +150,15 @@ export function parseFlowchart(source: string): ParseResult {
   function nodeFromToken(tok: string): string | null {
     const m = /^([A-Za-z_][\w-]*)(.*)$/.exec(tok);
     if (!m) return null;
-    const id = m[1]!;
+    const raw = m[1]!;
+    const id = safe(raw);
     const shape = m[2]!.trim();
     const node: ArchNode = { id, kind: 'service', parent: groupStack.at(-1) };
     if (shape) {
       node.label = unquote(shape.replace(/^[[({>/\\]+/, '').replace(/[\])}/\\]+$/, ''));
       node.icon = shape.startsWith('[(') ? 'database' : 'lucide:box';
     } else if (!nodes.has(id)) {
-      node.label = id;
+      node.label = raw;
       node.icon = 'lucide:box';
     }
     // A bare reference inside a subgraph should not move a node declared elsewhere.

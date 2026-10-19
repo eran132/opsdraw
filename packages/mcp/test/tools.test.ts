@@ -50,7 +50,7 @@ describe('editing', () => {
 
   it('adds groups and services, derives ids, and lays out', async () => {
     const g = await tools.addGroup(ctx, { path: 'd.mmd', label: 'My VPC' });
-    expect(g.id).toBe('My_VPC');
+    expect(g.id).toBe('my_vpc');
     const api = await tools.addService(ctx, {
       path: 'd.mmd',
       label: 'API',
@@ -58,13 +58,13 @@ describe('editing', () => {
       parent: g.id,
     });
     const db = await tools.addService(ctx, { path: 'd.mmd', label: 'API', icon: 'database' });
-    expect(api.id).toBe('API');
-    expect(db.id).toBe('API2');
+    expect(api.id).toBe('api');
+    expect(db.id).toBe('api2');
     expect(db.laidOut).toBe(true);
 
     const { diagram, errors } = parseArchitecture(fileText('d.mmd'));
     expect(errors).toEqual([]);
-    expect(diagram.nodes.find((n) => n.id === 'API')?.parent).toBe('My_VPC');
+    expect(diagram.nodes.find((n) => n.id === 'api')?.parent).toBe('my_vpc');
     for (const n of diagram.nodes) expect(diagram.layout[n.id]).toBeDefined();
   });
 

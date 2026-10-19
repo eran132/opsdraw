@@ -7,7 +7,7 @@ import type {
   ParseResult,
   Side,
 } from './model';
-import { emptyDiagram } from './model';
+import { emptyDiagram, idProblem, isValidIconRef } from './model';
 
 /**
  * Mermaid `architecture-beta` <-> Diagram.
@@ -142,6 +142,13 @@ export function parseArchitecture(source: string): ParseResult {
       return;
     }
     declaredAt.set(raw.id, lineNo);
+    const problem = idProblem(raw.id);
+    if (problem) errors.push({ line: lineNo, message: problem });
+    if (raw.icon && !isValidIconRef(raw.icon.trim()))
+      errors.push({
+        line: lineNo,
+        message: `Invalid icon "${raw.icon.trim()}": use name or prefix:name with letters, digits, _ or -`,
+      });
     const node: ArchNode = { id: raw.id, kind: raw.kind };
     if (raw.icon) node.icon = raw.icon.trim();
     if (raw.label !== undefined) node.label = raw.label.trim();

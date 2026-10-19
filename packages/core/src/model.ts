@@ -57,13 +57,35 @@ export interface ParseResult {
 export const emptyDiagram = (): Diagram => ({ nodes: [], edges: [], layout: {}, comments: [] });
 
 const ID_RE = /^[A-Za-z_][\w-]*$/;
+/** Mermaid's lexer reads a leading uppercase T/B/L/R as an edge side, so such ids fail to parse. */
+const SIDE_PREFIX_RE = /^[TBLR]/;
 
-export const isValidId = (id: string): boolean => ID_RE.test(id);
+export const isValidId = (id: string): boolean => ID_RE.test(id) && !SIDE_PREFIX_RE.test(id);
 
-/** Turns arbitrary text into a valid, unused node id. */
+/** Why an id is rejected, or null when Mermaid accepts it. */
+export function idProblem(id: string): string | null {
+  if (!ID_RE.test(id))
+    return `Invalid id "${id}": use letters, digits, _ or -, starting with a letter or _`;
+  if (SIDE_PREFIX_RE.test(id))
+    return `Invalid id "${id}": Mermaid does not accept ids starting with uppercase T, B, L or R (try "${id.charAt(0).toLowerCase()}${id.slice(1)}")`;
+  return null;
+}
+
+const ICON_RE = /^[A-Za-z0-9_-]+(:[A-Za-z0-9_-]+)?$/;
+
+/** Icon references Mermaid can parse: `name` or `prefix:name` with letters, digits, _ and -. */
+export const isValidIconRef = (ref: string): boolean => ICON_RE.test(ref);
+
+/** Turns arbitrary text into a valid, unused node id. Generated ids are lowercase. */
 export function makeId(base: string, taken: Iterable<string>): string {
   const used = new Set(taken);
-  let id = base.replace(/[^\w-]+/g, '_').replace(/^[^A-Za-z_]+/, '');
+  let id = base
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
+    .toLowerCase()
+    .replace(/[^\w-]+/g, '_')
+    .replace(/^[^a-z_]+/, '')
+    .replace(/_+$/, '');
   if (!id) id = 'node';
   if (!used.has(id)) return id;
   for (let i = 2; ; i++) {
