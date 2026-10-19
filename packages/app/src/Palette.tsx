@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { GENERIC_CATALOG, parseIconRef } from '@archidraw/core';
+import { GENERIC_CATALOG, parseIconRef } from '@opsdraw/core';
 import { Icon, usePacksVersion } from './Icon';
 import { installedPacks, searchIcons } from './icons';
 import { DRAG_MIME, type PaletteItem } from './Canvas';

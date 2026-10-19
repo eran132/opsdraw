@@ -1,4 +1,4 @@
-# archidraw
+# OpsDraw
 
 **Architecture as code.** Draw cloud and system architecture on a canvas, or write it as text.
 Both views edit the same plain Mermaid file, so diagrams live in git, render on GitHub and GitLab,
@@ -10,7 +10,7 @@ and can be generated from your infrastructure code or by an AI assistant over MC
 - **Diagrams from infrastructure code.** Import Terraform, CloudFormation, Kubernetes manifests and
   Docker Compose files. Resources are nested into their networks, plumbing (IAM policies, route
   table associations…) is hidden, and references become connections.
-- **MCP server.** `archidraw-mcp` lets Claude and other MCP clients create and edit diagrams and
+- **MCP server.** `opsdraw-mcp` lets Claude and other MCP clients create and edit diagrams and
   import infrastructure code. The app picks up those edits live in the file you have open.
 - **Icons without legal trouble.** A vendor-neutral icon set (Lucide) is built in. Official AWS,
   Azure and Google Cloud packs are imported by each user from the vendor's download page; see
@@ -50,11 +50,11 @@ Then open http://localhost:5173.
 ### MCP server
 
 ```bash
-npm run build -w archidraw-mcp
+npm run build -w opsdraw-mcp
 ```
 
 ```bash
-claude mcp add archidraw -- node packages/mcp/dist/index.js
+claude mcp add opsdraw -- node packages/mcp/dist/index.js
 ```
 
 See [packages/mcp/README.md](packages/mcp/README.md) for the full tool list and client configs.
@@ -81,4 +81,4 @@ CI runs all of them on Windows, macOS and Linux.
 ## License
 
 [Apache License 2.0](LICENSE). Third-party notices are in [NOTICE](NOTICE). Vendor names are
-trademarks of their owners; archidraw is not affiliated with any vendor.
+trademarks of their owners; OpsDraw is not affiliated with any vendor.

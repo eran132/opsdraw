@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { descendantsOf, isValidId, removeNode, renameNode, type Diagram } from '@archidraw/core';
+import { descendantsOf, isValidId, removeNode, renameNode, type Diagram } from '@opsdraw/core';
 import type { Selection } from './Canvas';
 import { Icon } from './Icon';
 

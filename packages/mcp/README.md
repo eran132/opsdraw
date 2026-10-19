@@ -1,11 +1,11 @@
-# archidraw-mcp
+# opsdraw-mcp
 
 An [MCP](https://modelcontextprotocol.io) server that lets AI assistants create and edit
-archidraw architecture diagrams and import Terraform into them.
+OpsDraw architecture diagrams and import Terraform into them.
 
 Diagrams are plain Mermaid `architecture-beta` files (`.mmd` / `.mermaid`), so they render on
 GitHub and GitLab as-is. Canvas positions are kept in `%% @pos <id> x y [w h]` comment lines that
-Mermaid ignores. If the archidraw app has a file open, it live-reloads the changes the server
+Mermaid ignores. If the OpsDraw app has a file open, it live-reloads the changes the server
 writes.
 
 ## Install
@@ -13,13 +13,13 @@ writes.
 ### Claude Code
 
 ```sh
-claude mcp add archidraw -- npx -y archidraw-mcp
+claude mcp add opsdraw -- npx -y opsdraw-mcp
 ```
 
 The server works inside the directory Claude Code was started in. To pin it to another folder:
 
 ```sh
-claude mcp add archidraw --env ARCHIDRAW_ROOT=/path/to/repo -- npx -y archidraw-mcp
+claude mcp add opsdraw --env OPSDRAW_ROOT=/path/to/repo -- npx -y opsdraw-mcp
 ```
 
 ### Claude Desktop (or any MCP client using a JSON config)
@@ -27,20 +27,20 @@ claude mcp add archidraw --env ARCHIDRAW_ROOT=/path/to/repo -- npx -y archidraw-
 ```json
 {
   "mcpServers": {
-    "archidraw": {
+    "opsdraw": {
       "command": "npx",
-      "args": ["-y", "archidraw-mcp"],
-      "env": { "ARCHIDRAW_ROOT": "/path/to/your/repo" }
+      "args": ["-y", "opsdraw-mcp"],
+      "env": { "OPSDRAW_ROOT": "/path/to/your/repo" }
     }
   }
 }
 ```
 
-Set `ARCHIDRAW_ROOT` for Claude Desktop, whose working directory is not your project.
+Set `OPSDRAW_ROOT` for Claude Desktop, whose working directory is not your project.
 
 ## Security
 
-Every path is resolved against `ARCHIDRAW_ROOT` (or the working directory when it is unset), and
+Every path is resolved against `OPSDRAW_ROOT` (or the working directory when it is unset), and
 paths that leave that root, including through `..`, other drives or symlinks, are rejected.
 Diagram tools only read and write `.mmd` / `.mermaid` files; the Terraform importer only reads
 `.tf` files and skips symlinks and hidden directories.
@@ -75,14 +75,14 @@ a position until you call `auto_layout` or place it in the app.
 ### Icons
 
 Use Mermaid built-ins (`cloud`, `database`, `disk`, `internet`, `server`) or `lucide:<name>`.
-Vendor packs (`aws:`, `azure:`, `gcp:`, ...) are not bundled. Users import them in the archidraw
+Vendor packs (`aws:`, `azure:`, `gcp:`, ...) are not bundled. Users import them in the OpsDraw
 app, and diagrams can reference them by prefix once they have.
 
 ## Development
 
 ```sh
-npm run build -w archidraw-mcp   # bundles to dist/index.js
-npm test -w archidraw-mcp
+npm run build -w opsdraw-mcp   # bundles to dist/index.js
+npm test -w opsdraw-mcp
 ```
 
 ## License

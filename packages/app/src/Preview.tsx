@@ -16,7 +16,7 @@ export function initMermaid() {
 
 /** Renders Mermaid source to an SVG string with the real Mermaid renderer. */
 export async function renderMermaid(text: string): Promise<string> {
-  const { svg } = await mermaid.render(`archidraw-${++counter}`, text);
+  const { svg } = await mermaid.render(`opsdraw-${++counter}`, text);
   return svg;
 }
 

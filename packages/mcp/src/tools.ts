@@ -19,7 +19,7 @@ import {
   renameNode,
   serializeArchitecture,
   sidesFor,
-} from '@archidraw/core';
+} from '@opsdraw/core';
 import type {
   ArchEdge,
   ArchNode,
@@ -30,7 +30,7 @@ import type {
   Side,
   IacKind,
   TerraformFile,
-} from '@archidraw/core';
+} from '@opsdraw/core';
 
 /**
  * Pure-ish tool implementations: each takes a context (the sandbox root) and plain arguments,
@@ -65,7 +65,7 @@ const MAX_TF_FILES = 2000;
 const ICON_RE = /^[A-Za-z0-9_-]+(:[A-Za-z0-9_-]+)?$/;
 
 export function contextFromEnv(env: NodeJS.ProcessEnv = process.env): ToolContext {
-  return { root: path.resolve(env.ARCHIDRAW_ROOT || process.cwd()) };
+  return { root: path.resolve(env.OPSDRAW_ROOT || process.cwd()) };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -153,7 +153,7 @@ async function loadDiagram(
   return { abs, diagram };
 }
 
-/** Writes via a temp file + rename so watchers (the archidraw app) never see half a file. */
+/** Writes via a temp file + rename so watchers (the opsdraw app) never see half a file. */
 async function writeText(abs: string, text: string): Promise<void> {
   await fs.mkdir(path.dirname(abs), { recursive: true });
   const tmp = `${abs}.${process.pid}.${Date.now()}.tmp`;
@@ -770,7 +770,7 @@ export function listIcons(args: { query?: string; limit?: number } = {}) {
       if (h.keywords) out.keywords = h.keywords;
       return out;
     }),
-    note: 'Use the "ref" value as the icon. Mermaid built-ins (cloud, database, disk, internet, server) render everywhere; lucide:<name> icons need the Lucide pack registered in other Mermaid renderers. Vendor packs (aws:, azure:, gcp:, ...) are imported by users in the archidraw app and can be referenced by their prefix if the user has them.',
+    note: 'Use the "ref" value as the icon. Mermaid built-ins (cloud, database, disk, internet, server) render everywhere; lucide:<name> icons need the Lucide pack registered in other Mermaid renderers. Vendor packs (aws:, azure:, gcp:, ...) are imported by users in the opsdraw app and can be referenced by their prefix if the user has them.',
   };
 }
 

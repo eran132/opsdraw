@@ -22,7 +22,7 @@ const canvasNode = (page: Page, label: string) =>
 test.beforeEach(async ({ page }) => {
   // Start in English unless a test switched language (survives reloads within a test).
   await page.addInitScript(() => {
-    if (!localStorage.getItem('archidraw:lang')) localStorage.setItem('archidraw:lang', 'en');
+    if (!localStorage.getItem('opsdraw:lang')) localStorage.setItem('opsdraw:lang', 'en');
   });
 });
 
@@ -32,7 +32,7 @@ test.describe('smoke', () => {
     page.on('pageerror', (e) => errors.push(e.message));
     page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
     await page.goto('/');
-    await expect(page).toHaveTitle(/archidraw/);
+    await expect(page).toHaveTitle(/OpsDraw/);
     await expect(page.locator('.react-flow__node')).toHaveCount(9);
     await expect(canvasNode(page, 'Load balancer')).toBeVisible();
     await expect(page.locator('.react-flow__edge')).toHaveCount(6);

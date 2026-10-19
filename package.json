@@ -1,5 +1,5 @@
 {
-  "name": "archidraw",
+  "name": "opsdraw",
   "private": true,
   "version": "0.1.0",
   "description": "Architecture-as-code editor: Mermaid text and a visual canvas, kept in sync.",
@@ -11,10 +11,10 @@
     "packages/mcp"
   ],
   "scripts": {
-    "dev": "npm run dev -w @archidraw/app",
-    "build": "npm run build -w @archidraw/app && npm run build -w archidraw-mcp",
-    "test": "npm run test -w @archidraw/core && npm run test -w archidraw-mcp && npm run test -w @archidraw/app",
-    "test:e2e": "npm run test:e2e -w @archidraw/app",
+    "dev": "npm run dev -w @opsdraw/app",
+    "build": "npm run build -w @opsdraw/app && npm run build -w opsdraw-mcp",
+    "test": "npm run test -w @opsdraw/core && npm run test -w opsdraw-mcp && npm run test -w @opsdraw/app",
+    "test:e2e": "npm run test:e2e -w @opsdraw/app",
     "typecheck": "tsc -p packages/core && tsc -p packages/app && tsc -p packages/mcp",
     "lint": "eslint .",
     "format": "prettier --write .",

@@ -6,7 +6,7 @@ export default defineConfig({
   target: 'node20',
   platform: 'node',
   // Core is a private workspace package shipped as TypeScript source, so it is bundled in.
-  noExternal: ['@archidraw/core'],
+  noExternal: ['@opsdraw/core'],
   // Core's own dependencies stay external (CommonJS packages can't be inlined into ESM).
   external: ['yaml', 'elkjs'],
   banner: { js: '#!/usr/bin/env node' },

@@ -1,5 +1,5 @@
-archidraw
-Copyright 2026 The archidraw contributors
+OpsDraw
+Copyright 2026 The OpsDraw contributors
 
 This product is licensed under the Apache License, Version 2.0 (see LICENSE).
 
@@ -10,4 +10,4 @@ It includes third-party software and artwork under their own licenses:
 - ELK.js (Eclipse Public License 2.0) — https://github.com/kieler/elkjs
 - CodeMirror (MIT License) — https://codemirror.net
 
-No vendor (AWS, Microsoft Azure, Google Cloud, or other) icons are distributed with archidraw.
+No vendor (AWS, Microsoft Azure, Google Cloud, or other) icons are distributed with OpsDraw.

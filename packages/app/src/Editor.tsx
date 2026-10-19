@@ -1,7 +1,7 @@
 import CodeMirror from '@uiw/react-codemirror';
 import { EditorView } from '@codemirror/view';
 import { useTranslation } from 'react-i18next';
-import type { ParseError } from '@archidraw/core';
+import type { ParseError } from '@opsdraw/core';
 
 interface Props {
   text: string;

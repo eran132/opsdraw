@@ -4,7 +4,7 @@ import {
   GENERIC_CATALOG,
   MERMAID_BUILTIN_ICONS,
   parseIconRef,
-} from '@archidraw/core';
+} from '@opsdraw/core';
 import { createStore, del, entries, set } from 'idb-keyval';
 import mermaid from 'mermaid';
 
@@ -22,7 +22,7 @@ export interface IconPack {
 
 const lucidePack = lucide as unknown as IconPack;
 const RESERVED = new Set(['lucide', ...MERMAID_BUILTIN_ICONS]);
-const packStore = createStore('archidraw', 'icon-packs');
+const packStore = createStore('opsdraw', 'icon-packs');
 const userPacks = new Map<string, IconPack>();
 const listeners = new Set<() => void>();
 

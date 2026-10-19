@@ -34,12 +34,12 @@ async function callOk<T = Record<string, unknown>>(
 
 beforeAll(async () => {
   if (!existsSync(entry)) {
-    execSync('npm run build -w archidraw-mcp', { cwd: repoRoot, stdio: 'inherit' });
+    execSync('npm run build -w opsdraw-mcp', { cwd: repoRoot, stdio: 'inherit' });
   }
-  root = mkdtempSync(path.join(os.tmpdir(), 'archidraw-mcp-stdio-'));
+  root = mkdtempSync(path.join(os.tmpdir(), 'opsdraw-mcp-stdio-'));
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v;
-  env.ARCHIDRAW_ROOT = root;
+  env.OPSDRAW_ROOT = root;
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [entry],
@@ -47,7 +47,7 @@ beforeAll(async () => {
     env,
     stderr: 'pipe',
   });
-  client = new Client({ name: 'archidraw-stdio-test', version: '0.0.0' });
+  client = new Client({ name: 'opsdraw-stdio-test', version: '0.0.0' });
   await client.connect(transport);
 }, 180_000);
 
@@ -56,9 +56,9 @@ afterAll(async () => {
   if (root) rmSync(root, { recursive: true, force: true });
 });
 
-describe('archidraw MCP server over stdio', () => {
+describe('opsdraw MCP server over stdio', () => {
   it('identifies itself', () => {
-    expect(client.getServerVersion()?.name).toBe('archidraw');
+    expect(client.getServerVersion()?.name).toBe('opsdraw');
   });
 
   it('lists all tools', async () => {

@@ -24,7 +24,7 @@ import {
   type Diagram,
   type NodeLayout,
   type Side,
-} from '@archidraw/core';
+} from '@opsdraw/core';
 import { CanvasActionsContext, nodeTypes, type ArchFlowNode } from './nodes';
 
 export type Selection = { type: 'node'; id: string } | { type: 'edge'; index: number } | null;
@@ -36,7 +36,7 @@ export interface PaletteItem {
   label: string;
 }
 
-export const DRAG_MIME = 'application/x-archidraw';
+export const DRAG_MIME = 'application/x-opsdraw';
 
 const GROUP_DEFAULT = { w: 320, h: 220 };
 

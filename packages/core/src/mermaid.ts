@@ -199,7 +199,7 @@ export function serializeArchitecture(diagram: Diagram): string {
 
   const positioned = diagram.nodes.filter((n) => diagram.layout[n.id]);
   if (positioned.length) {
-    out.push('', '  %% @layout archidraw canvas positions (Mermaid ignores these lines)');
+    out.push('', '  %% @layout opsdraw canvas positions (Mermaid ignores these lines)');
     for (const n of positioned) {
       const l = diagram.layout[n.id]!;
       const size = l.w !== undefined && l.h !== undefined ? ` ${round(l.w)} ${round(l.h)}` : '';

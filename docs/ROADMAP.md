@@ -3,13 +3,13 @@
 Built from a review of user-reported issues in draw.io, Excalidraw, Mermaid (`architecture-beta`),
 D2, Structurizr, mingrammer/diagrams, IaC visualizers (Rover, Inframap, Terravision, Pluralith,
 Blast Radius, KubeDiagrams) and diagram MCP servers (October 2026). Each item names the problem
-other tools have and how archidraw solves it.
+other tools have and how OpsDraw solves it.
 
 Legend: ✅ done · 🔜 next · 📋 planned
 
 ## Already addressed by the design
 
-| Problem elsewhere                                                     | archidraw                                                                                 |
+| Problem elsewhere                                                     | OpsDraw                                                                                   |
 | --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | Opaque, non-diffable files (draw.io compressed XML)                   | Plain Mermaid text; positions in sorted `%% @pos` lines with rounded coordinates          |
 | Mermaid layouts are random between renders (mermaid#6024, #6166)      | The canvas uses stored positions, so it is deterministic                                  |
@@ -56,7 +56,7 @@ Legend: ✅ done · 🔜 next · 📋 planned
 - 📋 **Terragrunt units** and Terraform Cloud plans (Terravision #114, Rover #21/#34).
 - 📋 **Helm/Kustomize:** accept `helm template` / `kustomize build` output on stdin; Gateway API
   routes; namespace filter (KubeDiagrams #44/#54/#72).
-- 📋 **Drift checks in CI:** `archidraw import … --check` exits non-zero when the committed
+- 📋 **Drift checks in CI:** `opsdraw import … --check` exits non-zero when the committed
   diagram is out of date, plus a GitHub Action (Pluralith #84, KubeDiagrams #21). Imports keep
   `%% @src` ids so re-imports update the diagram instead of replacing hand-made layout.
 
@@ -76,6 +76,6 @@ Legend: ✅ done · 🔜 next · 📋 planned
 ## Platform
 
 - 📋 **Desktop app (Tauri)** for Windows, macOS and Linux, with native file watching.
-- 📋 **CLI** (`archidraw export`, `import`, `check`) sharing code with the MCP server.
+- 📋 **CLI** (`opsdraw export`, `import`, `check`) sharing code with the MCP server.
 - 📋 **Git merge driver** that resolves `@pos` conflicts, and a visual diff for pull requests.
 - 📋 **Real-time collaboration** later, through a CRDT on the text (Yjs + CodeMirror).

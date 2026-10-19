@@ -2,14 +2,14 @@ import { mkdtempSync, rmSync, writeFileSync, readFileSync, mkdirSync, existsSync
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { parseArchitecture } from '@archidraw/core';
+import { parseArchitecture } from '@opsdraw/core';
 import * as tools from '../src/tools';
 
 let root: string;
 let ctx: tools.ToolContext;
 
 beforeEach(() => {
-  root = mkdtempSync(path.join(os.tmpdir(), 'archidraw-mcp-'));
+  root = mkdtempSync(path.join(os.tmpdir(), 'opsdraw-mcp-'));
   ctx = { root };
 });
 afterEach(() => rmSync(root, { recursive: true, force: true }));
@@ -318,7 +318,7 @@ describe('path safety', () => {
   it('rejects paths escaping the root', async () => {
     await expect(tools.createDiagram(ctx, { path: '../evil.mmd' })).rejects.toThrow(/outside/);
     await expect(tools.createDiagram(ctx, { path: 'a/../../evil.mmd' })).rejects.toThrow(/outside/);
-    const elsewhere = path.join(os.tmpdir(), 'archidraw-elsewhere.mmd');
+    const elsewhere = path.join(os.tmpdir(), 'opsdraw-elsewhere.mmd');
     await expect(tools.createDiagram(ctx, { path: elsewhere })).rejects.toThrow(/outside/);
     await expect(tools.readDiagram(ctx, { path: '../../etc/passwd.mmd' })).rejects.toThrow(
       /outside/,

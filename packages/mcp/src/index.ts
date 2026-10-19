@@ -5,7 +5,7 @@ import { z } from 'zod';
 import pkg from '../package.json' with { type: 'json' };
 import * as tools from './tools';
 
-const FORMAT = `File format: an archidraw diagram is a Mermaid "architecture-beta" file (.mmd or .mermaid) that renders on GitHub/GitLab as-is. Statements:
+const FORMAT = `File format: an opsdraw diagram is a Mermaid "architecture-beta" file (.mmd or .mermaid) that renders on GitHub/GitLab as-is. Statements:
   group <id>(<icon>)[<Label>] [in <parentGroup>]
   service <id>(<icon>)[<Label>] [in <group>]
   junction <id> [in <group>]
@@ -17,7 +17,7 @@ Icons are Mermaid built-ins (cloud, database, disk, internet, server) or "prefix
 const LAYOUT_NOTE =
   'Layout: with layout=true (default), the whole diagram is auto-laid out with ELK only if some node has no stored position, which replaces existing positions. Pass layout=false to keep hand-placed positions (the new node is written unplaced; call auto_layout later).';
 
-const PATHS_NOTE = `Paths are relative to the server root (ARCHIDRAW_ROOT or the working directory) and cannot leave it.`;
+const PATHS_NOTE = `Paths are relative to the server root (OPSDRAW_ROOT or the working directory) and cannot leave it.`;
 
 const ctx = tools.contextFromEnv();
 
@@ -54,7 +54,7 @@ const run =
     }
   };
 
-const server = new McpServer({ name: 'archidraw', version: pkg.version });
+const server = new McpServer({ name: 'opsdraw', version: pkg.version });
 
 server.registerTool(
   'create_diagram',
@@ -261,7 +261,7 @@ server.registerTool(
   {
     title: 'List icons',
     description:
-      'Search icons usable in diagrams. Searches the curated archidraw catalog (by keywords like "queue", "cache", "k8s"), the Mermaid built-ins (cloud, database, disk, internet, server) and all Lucide icons (as lucide:<name>). Without a query it lists the curated catalog. Vendor packs (aws:, azure:, gcp:, ...) are not bundled: users import them in the archidraw app, and you may reference them by prefix if the user says they have them.',
+      'Search icons usable in diagrams. Searches the curated opsdraw catalog (by keywords like "queue", "cache", "k8s"), the Mermaid built-ins (cloud, database, disk, internet, server) and all Lucide icons (as lucide:<name>). Without a query it lists the curated catalog. Vendor packs (aws:, azure:, gcp:, ...) are not bundled: users import them in the opsdraw app, and you may reference them by prefix if the user says they have them.',
     inputSchema: {
       query: z.string().optional().describe('Search words, e.g. "message queue"'),
       limit: z.number().int().min(1).max(500).optional().describe('Max results (default 30)'),

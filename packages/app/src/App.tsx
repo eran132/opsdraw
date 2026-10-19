@@ -10,7 +10,7 @@ import {
   type Diagram,
   type LayoutDirection,
   type ParseError,
-} from '@archidraw/core';
+} from '@opsdraw/core';
 import { Canvas, type Selection } from './Canvas';
 import { Editor } from './Editor';
 import { Inspector } from './Inspector';
@@ -99,7 +99,7 @@ export function App() {
   }, [setText]);
 
   useEffect(() => {
-    document.title = `${dirty ? '• ' : ''}${fileName} — archidraw`;
+    document.title = `${dirty ? '• ' : ''}${fileName} — OpsDraw`;
   }, [dirty, fileName]);
 
   useEffect(() => {
@@ -244,7 +244,7 @@ export function App() {
       <header className="toolbar">
         <div className="brand">
           <img src="./favicon.svg" alt="" width={22} height={22} />
-          <strong>archidraw</strong>
+          <strong>OpsDraw</strong>
           <span className="muted small">{t('app.tagline')}</span>
         </div>
         <div className="actions">
@@ -342,8 +342,8 @@ export function App() {
       <footer className="statusbar">
         <span role="status">{status}</span>
         <span className="muted small">
-          Apache-2.0 · Vendor names and icons belong to their owners; archidraw is not affiliated
-          with them.
+          Apache-2.0 · Vendor names and icons belong to their owners; OpsDraw is not affiliated with
+          them.
         </span>
       </footer>
       <PackDialog open={packsOpen} onClose={() => setPacksOpen(false)} />
