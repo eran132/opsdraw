@@ -67,6 +67,7 @@ describe('format detection', () => {
     ['jobs/shop.hcl', NOMAD, 'nomad'],
     ['web.yaml', K8S, 'kubernetes'],
     ['main.tf', 'resource "a_b" "c" {}', 'terraform'],
+    ['main.tofu', 'resource "a_b" "c" {}', 'terraform'],
     ['docker-compose.yml', 'services:\n  a:\n    image: x\n', 'compose'],
     ['settings.ini', 'just text', null],
     ['vars.hcl', 'region = "eu"', null],
@@ -89,5 +90,18 @@ describe('format detection', () => {
     for (const prefix of ['cluster_', 'ansible_', 'nomad_', 'k8s_'])
       expect(ids.some((id) => id.startsWith(prefix))).toBe(true);
     await expect(parse('architecture', serializeArchitecture(diagram))).resolves.toBeTruthy();
+  });
+});
+
+describe('OpenTofu', () => {
+  it('loads foo.tofu instead of foo.tf in the same directory, like tofu does', () => {
+    const { diagram, overridden } = importIac([
+      { path: 'infra/main.tf', content: 'resource "aws_instance" "terraform_only" {}' },
+      { path: 'infra/main.tofu', content: 'resource "aws_instance" "tofu_only" {}' },
+      { path: 'infra/db.tf', content: 'resource "aws_db_instance" "db" {}' },
+      { path: 'other/main.tf', content: 'resource "aws_instance" "elsewhere" {}' },
+    ]);
+    expect(overridden).toEqual(['infra/main.tf']);
+    expect(diagram.nodes.map((n) => n.id).sort()).toEqual(['db', 'elsewhere', 'tofu_only']);
   });
 });

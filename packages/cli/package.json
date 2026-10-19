@@ -1,0 +1,31 @@
+{
+  "name": "opsdraw",
+  "version": "0.1.0",
+  "description": "OpsDraw command line: import infrastructure-as-code into Mermaid architecture diagrams, keep them in sync in CI, export SVG.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "opsdraw": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@iconify-json/lucide": "^1.2.146",
+    "elkjs": "^0.12.0",
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@opsdraw/core": "0.1.0",
+    "@types/node": "^22.0.0",
+    "tsup": "^9.0.0"
+  }
+}

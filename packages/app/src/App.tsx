@@ -179,7 +179,7 @@ export function App() {
   }
 
   async function doImportIac() {
-    const files = await pickFiles('.tf,.yaml,.yml,.json,.template,.ini,.nomad,.hcl', true);
+    const files = await pickFiles('.tf,.tofu,.yaml,.yml,.json,.template,.ini,.nomad,.hcl', true);
     if (!files.length) return;
     const contents = await Promise.all(
       files.map(async (f) => ({ path: f.name, content: await f.text() })),

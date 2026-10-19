@@ -57,20 +57,10 @@ export interface ToolContext {
 }
 
 export const DIAGRAM_EXTENSIONS = ['.mmd', '.mermaid'] as const;
-export const TERRAFORM_EXTENSIONS = ['.tf'] as const;
-/** Terraform, CloudFormation (YAML/JSON/.template), Kubernetes manifests and Compose files. */
-export const IAC_EXTENSIONS = [
-  '.tf',
-  '.yaml',
-  '.yml',
-  '.json',
-  '.template',
-  '.ini',
-  '.nomad',
-  '.hcl',
-] as const;
-/** Ansible inventories are often extension-less files with these names. */
-export const IAC_BARE_NAMES = ['hosts', 'inventory'] as const;
+export const TERRAFORM_EXTENSIONS = ['.tf', '.tofu'] as const;
+import { IAC_BARE_NAMES, IAC_EXTENSIONS } from '@opsdraw/core';
+
+export { IAC_BARE_NAMES, IAC_EXTENSIONS };
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 const MAX_TF_FILES = 2000;
 const ICON_RE = /^[A-Za-z0-9_-]+(:[A-Za-z0-9_-]+)?$/;
@@ -653,7 +643,13 @@ export async function importIacFiles(
     'Infrastructure',
     IAC_BARE_NAMES,
   );
-  const { diagram: parsed, kinds, skipped } = importIac(files, { includeAll: args.includeAll });
+  const {
+    diagram: parsed,
+    kinds,
+    skipped,
+    overridden,
+    warnings,
+  } = importIac(files, { includeAll: args.includeAll });
   if (!kinds.length)
     throw new ToolError(
       `None of the ${files.length} file(s) looked like Terraform, CloudFormation, Kubernetes, Compose, a cluster config, an Ansible inventory or a Nomad job`,
@@ -666,6 +662,8 @@ export async function importIacFiles(
     kinds: kinds as IacKind[],
     files: files.map((f) => f.path).filter((f) => !skipped.includes(f)),
     skipped,
+    overridden,
+    warnings,
     nodes: diagram.nodes.length,
     edges: diagram.edges.length,
     mermaid,

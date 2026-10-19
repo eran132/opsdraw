@@ -27,6 +27,14 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - name: CLI smoke test
+        shell: bash
+        run: |
+          node packages/cli/dist/index.js --version
+          node packages/cli/dist/index.js validate packages/cli/test/fixtures/arch.mmd
+          node packages/cli/dist/index.js import packages/cli/test/fixtures/infra --recursive -o packages/cli/test/fixtures/arch.mmd --check
+          node packages/cli/dist/index.js export packages/cli/test/fixtures/arch.mmd -o "$RUNNER_TEMP/arch.svg"
+          git diff --exit-code packages/cli/test/fixtures
       - run: npx playwright install --with-deps chromium
         working-directory: packages/app
       - run: npm run test:e2e

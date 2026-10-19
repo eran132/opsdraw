@@ -1,0 +1,51 @@
+name: OpsDraw diagram check
+description: Fails when a Mermaid architecture diagram no longer matches the infrastructure-as-code it was imported from.
+author: eran132
+branding:
+  icon: layers
+  color: blue
+
+inputs:
+  source:
+    description: IaC file(s) or directories to import, space-separated (Terraform, CloudFormation, Kubernetes, Compose, cluster configs, Ansible, Nomad).
+    required: true
+  diagram:
+    description: The committed diagram to compare against (.mmd or .mermaid).
+    required: true
+  recursive:
+    description: Walk sub-directories of the source.
+    required: false
+    default: 'false'
+  node-version:
+    description: Node.js version used to run OpsDraw.
+    required: false
+    default: '22'
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+    # The CLI is not on npm yet, so it is built from this action's own checkout.
+    - name: Build the OpsDraw CLI
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: |
+        if [ ! -f packages/cli/dist/index.js ]; then
+          npm ci -w opsdraw --no-audit --no-fund
+          npm run build -w opsdraw
+        fi
+    - name: Check the diagram
+      shell: bash
+      env:
+        OPSDRAW_SOURCE: ${{ inputs.source }}
+        OPSDRAW_DIAGRAM: ${{ inputs.diagram }}
+        OPSDRAW_RECURSIVE: ${{ inputs.recursive }}
+        OPSDRAW_CLI: ${{ github.action_path }}/packages/cli/dist/index.js
+      run: |
+        args=()
+        if [ "$OPSDRAW_RECURSIVE" = "true" ]; then args+=(--recursive); fi
+        # Word-splitting of OPSDRAW_SOURCE is intended: it may list several paths.
+        # shellcheck disable=SC2086
+        node "$OPSDRAW_CLI" import $OPSDRAW_SOURCE -o "$OPSDRAW_DIAGRAM" --check "${args[@]}"

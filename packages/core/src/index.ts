@@ -9,6 +9,7 @@ export * from './iac';
 export * from './clusterconfig';
 export * from './ansible';
 export * from './nomad';
+export * from './tfjson';
 export * from './icons';
 export * from './layout';
 export * from './svg';
@@ -30,3 +31,4 @@ export function parseMermaid(source: string): ParseResult & { kind: 'architectur
   }
   return { ...parseArchitecture(source), kind: 'architecture' };
 }
+export * from './merge';

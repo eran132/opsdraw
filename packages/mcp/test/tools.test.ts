@@ -278,7 +278,7 @@ resource "aws_security_group_rule" "allow" {
     mkdirSync(path.join(root, 'infra', 'mod'), { recursive: true });
     writeFileSync(path.join(root, 'infra', 'mod', 'main.tf'), TF);
     await expect(tools.importTerraform(ctx, { source: 'infra', output: 'a.mmd' })).rejects.toThrow(
-      /No .tf files/,
+      'No .tf/.tofu files',
     );
     const r = await tools.importTerraform(ctx, {
       source: 'infra',

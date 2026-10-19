@@ -41,7 +41,22 @@ interface Block {
   body: string;
   /** A `data` block (data source). */
   data?: boolean;
+  /** Key prefix of the module instance the block belongs to (`module.vpc.`); empty at the root. */
+  scope?: string;
+  /** Key of the module group the block is drawn in, when it comes from a local module. */
+  module?: string;
+  /** A module call whose source is among the files: drawn as a group of its resources. */
+  moduleGroup?: boolean;
 }
+
+export interface TerraformImportResult {
+  diagram: Diagram;
+  /** Things the importer could not draw faithfully (missing module sources, unknown types...). */
+  warnings: string[];
+}
+
+/** Files read as HCL when collecting a module directory (OpenTofu `.tofu` files included). */
+const HCL_FILE = /\.(tf|tofu)$/i;
 
 /** Synthetic block type for a hypervisor host (Proxmox node). */
 const HOST = 'host';
@@ -156,6 +171,29 @@ function rankOf(type: string): number | undefined {
 
 const isGroupType = (type: string) => rankOf(type) !== undefined;
 
+/** Resources hidden by default: policies, attachments, rules, records, helper providers... */
+export function isPlumbingType(type: string): boolean {
+  return PLUMBING.test(baseType(normalizeResourceType(type)));
+}
+
+/**
+ * Resources drawn as containment groups: networks, subnets, bridges and switches, resource groups,
+ * hypervisor hosts, clusters and datacenters.
+ */
+export function isNetworkGroupType(type: string): boolean {
+  return isGroupType(type.toLowerCase());
+}
+
+/** ` ×3`, ` ×N` or ` (for_each)` for a block with `count` / `for_each`; empty when conditional. */
+function multiplicity(body: string): string {
+  const top = topLevel(body);
+  if (/^\s*for_each\s*=/m.test(top)) return ' (for_each)';
+  const count = /^\s*count\s*=\s*([^\n]+)/m.exec(top)?.[1]?.trim().replace(/,$/, '');
+  if (!count || count.includes('?')) return '';
+  if (/^\d+$/.test(count)) return Number(count) > 1 ? ` ×${Number(count)}` : '';
+  return ' ×N';
+}
+
 function groupIcon(type: string): string {
   const t = baseType(type);
   if (t === HOST || HOST_TYPES.test(t)) return 'lucide:server-cog';
@@ -172,12 +210,38 @@ export function parseTerraform(
   files: TerraformFile[],
   options: TerraformImportOptions = {},
 ): Diagram {
-  const blocks = files.flatMap((f) => extractBlocks(stripComments(f.content)));
+  return parseTerraformWithWarnings(files, options).diagram;
+}
+
+/**
+ * Like {@link parseTerraform}, and also reports what could not be drawn faithfully.
+ *
+ * Local modules (`source = "./modules/vpc"`) whose files are among `files` are drawn as groups of
+ * their resources, recursively; `module.vpc.<output>` references resolve through the module's
+ * `output` blocks to the resource they name. Remote modules become a single node, unless
+ * `.terraform/modules/modules.json` is among the files and maps them to a directory that is.
+ */
+export function parseTerraformWithWarnings(
+  files: TerraformFile[],
+  options: TerraformImportOptions = {},
+): TerraformImportResult {
+  const warnings: string[] = [];
+  const warn = (w: string) => {
+    if (!warnings.includes(w)) warnings.push(w);
+  };
+  const { blocks, outputs, expanded } = loadModules(files, warn);
   const byKey = new Map(blocks.map((b) => [b.key, b]));
-  const refsOf = new Map(blocks.map((b) => [b.key, findRefs(b.body, byKey, b.key)]));
+  const ctx: RefContext = { byKey, outputs, expanded, warn };
+  const refsOf = new Map(
+    blocks.map((b) => [
+      b.key,
+      // A module group's inputs would nest it by what it is given; only its contents place it.
+      b.moduleGroup ? new Set<string>() : findRefs(b.body, ctx, b.key, b.scope),
+    ]),
+  );
   addNameReferences(blocks, byKey, refsOf);
 
-  const isGroup = (b: Block) => isGroupType(b.type);
+  const isGroup = (b: Block) => !!b.moduleGroup || isGroupType(b.type);
   const isShown = (b: Block) =>
     isGroup(b) ||
     (b.data
@@ -185,7 +249,11 @@ export function parseTerraform(
       : options.includeAll || !PLUMBING.test(baseType(b.type)));
   const kept = blocks.filter(isShown);
   const keptKeys = new Set(kept.map((b) => b.key));
-  const rank = (key: string) => rankOf(byKey.get(key)!.type) ?? -1;
+  // Module groups are the outermost containers of what they hold.
+  const rank = (key: string) => {
+    const b = byKey.get(key)!;
+    return b.moduleGroup ? 10 : (rankOf(b.type) ?? -1);
+  };
 
   // Hidden ports/profiles: what uses them joins the networks they attach to.
   const linkedGroups = (key: string, seen = new Set<string>()): string[] => {
@@ -213,20 +281,36 @@ export function parseTerraform(
   const diagram = emptyDiagram();
   const ids = new Map<string, string>();
   const nameCounts = new Map<string, number>();
-  for (const b of kept) nameCounts.set(b.name, (nameCounts.get(b.name) ?? 0) + 1);
-  for (const b of kept) {
+  const scopedName = (b: Block) => `${b.scope ?? ''}|${b.name}`;
+  for (const b of kept) nameCounts.set(scopedName(b), (nameCounts.get(scopedName(b)) ?? 0) + 1);
+  // Root resources get the shortest ids; module contents are prefixed by their module's name.
+  const depth = (b: Block) => (b.scope ?? '').split('module.').length;
+  for (const b of [...kept].sort((x, y) => depth(x) - depth(y))) {
     // Short ids when names are unique; type-qualified when two resources share a name.
-    const base = nameCounts.get(b.name) === 1 ? b.name : `${b.type}_${b.name}`;
-    ids.set(b.key, makeId(base, ids.values()));
+    const own = nameCounts.get(scopedName(b)) === 1 ? b.name : `${b.type}_${b.name}`;
+    const owner = b.module ? byKey.get(b.module)?.name : undefined;
+    ids.set(b.key, makeId(owner ? `${owner}_${own}` : own, ids.values()));
   }
 
   const nodeOf = new Map<string, ArchNode>();
   for (const b of kept) {
+    const label = b.moduleGroup
+      ? `${b.name}${multiplicity(b.body)}`
+      : b.type === 'module'
+        ? `${b.name}${multiplicity(b.body)} (module)`
+        : b.data
+          ? (nameAttr(b) ?? b.name)
+          : `${b.name}${multiplicity(b.body)}`;
     const node: ArchNode = {
       id: ids.get(b.key)!,
       kind: isGroup(b) ? 'group' : 'service',
-      label: b.type === 'module' ? `${b.name} (module)` : b.data ? (nameAttr(b) ?? b.name) : b.name,
-      icon: isGroup(b) ? groupIcon(b.type) : b.type === 'module' ? 'lucide:package' : iconOf(b),
+      label,
+      icon:
+        b.moduleGroup || b.type === 'module'
+          ? 'lucide:package'
+          : isGroup(b)
+            ? groupIcon(b.type)
+            : iconOf(b),
     };
     const parent = pickParent(b);
     if (parent) node.parent = ids.get(parent);
@@ -263,7 +347,7 @@ export function parseTerraform(
       };
       diagram.nodes.push(node);
       nodeOf.set(key, node);
-      for (const r of findRefs(pool, byKey, b.key)) if (keptKeys.has(r)) addEdge(key, r);
+      for (const r of findRefs(pool, ctx, b.key, b.scope)) if (keptKeys.has(r)) addEdge(key, r);
     }
   }
 
@@ -297,7 +381,14 @@ export function parseTerraform(
     }
   }
   refineGroups();
-  return diagram;
+  const unknown = kept.filter(
+    (b) => !isGroup(b) && !b.data && b.type !== 'module' && iconOf(b) === 'lucide:box',
+  ).length;
+  if (unknown)
+    warn(
+      `${unknown} ${unknown === 1 ? 'resource' : 'resources'} of unknown type shown with a generic icon`,
+    );
+  return { diagram, warnings };
 
   function iconOf(b: Block): string {
     if (/^(lxd|incus)_instance$/.test(b.type))
@@ -319,7 +410,9 @@ export function parseTerraform(
       .map((r) => byKey.get(r)!)
       .filter((r) => keptKeys.has(r.key) && isGroup(r) && r.key !== b.key);
     // Prefer the most specific container: subnet or bridge, then network, host, cluster, DC.
-    return groups.sort((x, y) => rank(x.key) - rank(y.key))[0]?.key;
+    const best = groups.sort((x, y) => rank(x.key) - rank(y.key))[0]?.key;
+    // Otherwise inside the module it comes from.
+    return best ?? (b.module && keptKeys.has(b.module) ? b.module : undefined);
   }
 
   /**
@@ -337,7 +430,9 @@ export function parseTerraform(
       for (let p = parentKey(key); p && !out.includes(p); p = parentKey(p)) out.push(p);
       return out;
     };
-    const groups = kept.filter(isGroup).sort((x, y) => rank(x.key) - rank(y.key));
+    const groups = kept
+      .filter((g) => isGroup(g) && !g.moduleGroup)
+      .sort((x, y) => rank(x.key) - rank(y.key));
     for (const g of groups) {
       const services = [...nodeOf].filter(
         ([k, n]) => n.kind === 'service' && ancestors(k).includes(g.key),
@@ -449,26 +544,83 @@ function networkNames(b: Block): string[] {
   return [...new Set(out)];
 }
 
-function stripComments(src: string): string {
-  let out = '';
-  let i = 0;
-  let inString = false;
+/** Index just after the quoted string opening at `i`, honoring `${ ... }` nesting. */
+function skipString(src: string, i: number): number {
+  i++;
   while (i < src.length) {
     const c = src[i]!;
-    if (inString) {
-      out += c;
-      if (c === '\\') out += src[++i] ?? '';
-      else if (c === '"') inString = false;
-      i++;
-    } else if (c === '"') {
-      inString = true;
-      out += c;
-      i++;
+    if (c === '\\') i += 2;
+    else if (c === '"') return i + 1;
+    // `$${` and `%%{` are escapes for a literal `${` / `%{`.
+    else if ((c === '$' || c === '%') && src[i + 1] === c) i += 2;
+    else if ((c === '$' || c === '%') && src[i + 1] === '{') i = skipInterpolation(src, i + 2);
+    // Quoted strings end at the line; an unterminated one must not swallow the file.
+    else if (c === '\n') return i;
+    else i++;
+  }
+  return i;
+}
+
+/** Index just after the `}` closing an interpolation whose body starts at `i`. */
+function skipInterpolation(src: string, i: number): number {
+  let depth = 1;
+  while (i < src.length) {
+    const c = src[i]!;
+    if (c === '"') {
+      i = skipString(src, i);
+      continue;
+    }
+    if (c === '{') depth++;
+    else if (c === '}' && --depth === 0) return i + 1;
+    i++;
+  }
+  return i;
+}
+
+/** The text of the interpolations in a heredoc, without braces or quotes, so refs survive. */
+function heredocRefs(body: string): string {
+  const out: string[] = [];
+  for (let i = 0; i < body.length; i++) {
+    const c = body[i];
+    if ((c === '$' || c === '%') && body[i + 1] === c) i++;
+    else if ((c === '$' || c === '%') && body[i + 1] === '{') {
+      const end = skipInterpolation(body, i + 2);
+      out.push(body.slice(i + 2, end - 1).replace(/[{}"\\\r\n]/g, ' '));
+      i = end - 1;
+    }
+  }
+  return out.join(' ');
+}
+
+const HEREDOC = /<<-?([A-Za-z_][\w-]*)[ \t]*\r?\n/y;
+
+/**
+ * Drops comments and turns heredocs into one-line strings that keep only their interpolations, so
+ * braces in comments, heredocs and strings cannot unbalance block matching.
+ */
+function cleanSource(src: string): string {
+  let out = '';
+  let i = 0;
+  while (i < src.length) {
+    const c = src[i]!;
+    if (c === '"') {
+      const end = skipString(src, i);
+      out += src.slice(i, end);
+      i = end;
     } else if (c === '#' || (c === '/' && src[i + 1] === '/')) {
       while (i < src.length && src[i] !== '\n') i++;
     } else if (c === '/' && src[i + 1] === '*') {
       const end = src.indexOf('*/', i + 2);
       i = end === -1 ? src.length : end + 2;
+    } else if (c === '<' && src[i + 1] === '<' && ((HEREDOC.lastIndex = i), HEREDOC.test(src))) {
+      const start = HEREDOC.lastIndex;
+      const id = /<<-?([A-Za-z_][\w-]*)/.exec(src.slice(i))![1]!;
+      const close = new RegExp(`^[ \\t]*${id}[ \\t]*\\r?$`, 'gm');
+      close.lastIndex = start;
+      const m = close.exec(src);
+      const end = m ? m.index : src.length;
+      out += `"${heredocRefs(src.slice(start, end))}"`;
+      i = m ? m.index + m[0].length : src.length;
     } else {
       out += c;
       i++;
@@ -477,15 +629,41 @@ function stripComments(src: string): string {
   return out;
 }
 
-/** The body of the block whose `{` is just before `start`. */
+/** The body of the block whose `{` is just before `start` (on comment-free source). */
 function blockBody(src: string, start: number): string {
   let depth = 1;
   let i = start;
-  for (; i < src.length && depth > 0; i++) {
-    if (src[i] === '{') depth++;
-    else if (src[i] === '}') depth--;
+  while (i < src.length) {
+    const c = src[i]!;
+    if (c === '"') {
+      i = skipString(src, i);
+      continue;
+    }
+    if (c === '{') depth++;
+    else if (c === '}' && --depth === 0) return src.slice(start, i);
+    i++;
   }
-  return src.slice(start, i - 1);
+  return src.slice(start);
+}
+
+/** A block body without its nested blocks and objects: only its own attributes. */
+function topLevel(body: string): string {
+  let out = '';
+  let i = 0;
+  while (i < body.length) {
+    const c = body[i]!;
+    if (c === '"') {
+      const end = skipString(body, i);
+      out += body.slice(i, end);
+      i = end;
+    } else if (c === '{') {
+      i += blockBody(body, i + 1).length + 2;
+    } else {
+      out += c;
+      i++;
+    }
+  }
+  return out;
 }
 
 /** Bodies of nested blocks named `name` (`machine_pools { ... }`), at any depth. */
@@ -494,26 +672,252 @@ function subBlocks(body: string, name: string): string[] {
   return [...body.matchAll(re)].map((m) => blockBody(body, m.index + m[0].length));
 }
 
-function extractBlocks(src: string): Block[] {
-  const out: Block[] = [];
-  const re = /^\s*(resource|module|data)\s+"([^"]+)"(?:\s+"([^"]+)")?\s*\{/gm;
-  for (const m of src.matchAll(re)) {
-    const body = blockBody(src, m.index + m[0].length);
-    if (m[1] === 'module') out.push({ key: `module.${m[2]}`, type: 'module', name: m[2]!, body });
-    else if (m[1] === 'data' && m[3])
-      out.push({ key: `data.${m[2]}.${m[3]}`, type: m[2]!, name: m[3], body, data: true });
-    else if (m[3]) out.push({ key: `${m[2]}.${m[3]}`, type: m[2]!, name: m[3], body });
+interface RawBlock {
+  kind: 'resource' | 'data' | 'module' | 'output';
+  key: string;
+  type: string;
+  name: string;
+  body: string;
+}
+
+const BLOCK_HEAD = /([A-Za-z_][\w-]*)((?:\s+(?:"[^"\n]*"|[A-Za-z_][\w-]*))*)\s*\{/y;
+
+/**
+ * Top-level `resource`, `data`, `module` and `output` blocks of cleaned HCL. Everything else
+ * (`terraform`, `provider`, `variable`, `locals`, `moved`, `import`, `removed`, `check`...) is
+ * skipped.
+ */
+function extractBlocks(src: string): RawBlock[] {
+  const out: RawBlock[] = [];
+  let i = 0;
+  while (i < src.length) {
+    if (/\s/.test(src[i]!)) {
+      i++;
+      continue;
+    }
+    BLOCK_HEAD.lastIndex = i;
+    const m = BLOCK_HEAD.exec(src);
+    if (m) {
+      const start = i + m[0].length;
+      const body = blockBody(src, start);
+      i = start + body.length + 1;
+      const labels = [...m[2]!.matchAll(/"([^"]*)"|([A-Za-z_][\w-]*)/g)].map((l) => l[1] ?? l[2]!);
+      const [a, b] = labels;
+      if (m[1] === 'resource' && a && b)
+        out.push({ kind: 'resource', key: `${a}.${b}`, type: a, name: b, body });
+      else if (m[1] === 'data' && a && b)
+        out.push({ kind: 'data', key: `data.${a}.${b}`, type: a, name: b, body });
+      else if (m[1] === 'module' && a)
+        out.push({ kind: 'module', key: `module.${a}`, type: 'module', name: a, body });
+      else if (m[1] === 'output' && a)
+        out.push({ kind: 'output', key: a, type: 'output', name: a, body });
+      continue;
+    }
+    // Not a block: skip the rest of the line (strings and objects included).
+    while (i < src.length && src[i] !== '\n') {
+      if (src[i] === '"') i = skipString(src, i);
+      else if (src[i] === '{') i += blockBody(src, i + 1).length + 2;
+      else i++;
+    }
   }
   return out;
 }
 
-function findRefs(body: string, known: Map<string, Block>, self: string): Set<string> {
+interface RefContext {
+  byKey: Map<string, Block>;
+  /** Output name -> output body, per expanded module instance. */
+  outputs: Map<string, Map<string, string>>;
+  /** Keys of module calls drawn as groups. */
+  expanded: Set<string>;
+  warn: (w: string) => void;
+}
+
+/** `module.network.module.subnet` -> `network.subnet`. */
+const modulePath = (key: string) => key.replace(/(^|\.)module\./g, '$1');
+
+function findRefs(
+  body: string,
+  ctx: RefContext,
+  self: string,
+  scope = '',
+  seen = new Set<string>(),
+): Set<string> {
   const refs = new Set<string>();
   for (const m of body.matchAll(
     /\b(data\.)?(module|[a-z][a-z0-9]*_[a-z0-9_]+)\.([A-Za-z_][\w-]*)/g,
   )) {
-    const key = `${m[1] ?? ''}${m[2]}.${m[3]}`;
-    if (key !== self && known.has(key)) refs.add(key);
+    if (m[2] === 'module' && !m[1]) {
+      const rest = body.slice(m.index + m[0].length);
+      const output = /^(?:\[[^\]]*\])?\.([A-Za-z_][\w-]*)/.exec(rest)?.[1];
+      for (const r of moduleRef(`${scope}module.${m[3]}`, output, ctx, seen))
+        if (r !== self) refs.add(r);
+      continue;
+    }
+    const key = `${scope}${m[1] ?? ''}${m[2]}.${m[3]}`;
+    if (key !== self && ctx.byKey.has(key)) refs.add(key);
   }
   return refs;
+}
+
+/**
+ * What `module.x.output` stands for: the collapsed module node itself, or, for a module drawn as a
+ * group, the resources its `output "output"` block names (groups can't be edge ends in Mermaid).
+ */
+function moduleRef(
+  key: string,
+  output: string | undefined,
+  ctx: RefContext,
+  seen: Set<string>,
+): string[] {
+  if (!ctx.expanded.has(key)) return ctx.byKey.has(key) ? [key] : [];
+  if (!output) return [];
+  const id = `${key}.${output}`;
+  if (seen.has(id)) return [];
+  seen.add(id);
+  const body = ctx.outputs.get(key)?.get(output);
+  if (body === undefined) {
+    ctx.warn(`module "${modulePath(key)}": output "${output}" not found`);
+    return [];
+  }
+  const value = topLevel(body).replace(/^\s*(description|sensitive|depends_on)\s*=.*$/gm, '');
+  return [...findRefs(value, ctx, id, `${key}.`, seen)];
+}
+
+const normPath = (p: string) =>
+  p
+    .replace(/\\/g, '/')
+    .replace(/\/{2,}/g, '/')
+    .replace(/^(\.\/)+/, '');
+const dirOf = (p: string) => p.slice(0, Math.max(p.lastIndexOf('/'), 0));
+
+/** `infra` + `./modules/../vpc` -> `infra/vpc`. */
+function joinPath(dir: string, rel: string): string {
+  const out: string[] = [];
+  for (const s of [...dir.split('/'), ...normPath(rel).split('/')]) {
+    if (!s || s === '.') continue;
+    if (s === '..' && out.length && out[out.length - 1] !== '..') out.pop();
+    else out.push(s);
+  }
+  return (dir.startsWith('/') ? '/' : '') + out.join('/');
+}
+
+const isLocalSource = (src: string) => /^\.\.?([/\\]|$)/.test(src);
+const sourceOf = (body: string) =>
+  /^\s*source\s*=\s*"([^"]*)"/m.exec(topLevel(body))?.[1]?.replace(/\\/g, '/');
+const MANIFEST = /(^|\/)\.terraform\/modules\/modules\.json$/;
+
+interface Manifest {
+  /** The root module directory the manifest belongs to. */
+  root: string;
+  /** Module key (`vpc`, `network.subnet`) -> directory, relative to the files' paths. */
+  dirs: Map<string, string>;
+}
+
+/** `.terraform/modules/modules.json` files written by `terraform init`. */
+function readManifests(files: { path: string; content: string }[], warn: (w: string) => void) {
+  const out: Manifest[] = [];
+  for (const f of files) {
+    if (!MANIFEST.test(f.path)) continue;
+    const root = dirOf(dirOf(dirOf(f.path)));
+    const dirs = new Map<string, string>();
+    try {
+      const json = JSON.parse(f.content) as { Modules?: { Key?: string; Dir?: string }[] };
+      for (const m of json.Modules ?? [])
+        if (m.Key && typeof m.Dir === 'string') dirs.set(m.Key, joinPath(root, m.Dir));
+    } catch {
+      warn(`${f.path}: could not be read as JSON`);
+    }
+    out.push({ root, dirs });
+  }
+  return out;
+}
+
+/**
+ * Reads every file into blocks, expanding module calls whose source directory is among the files
+ * into scoped copies of that directory's blocks (`module.vpc.aws_subnet.private`).
+ */
+function loadModules(input: TerraformFile[], warn: (w: string) => void) {
+  const files = input.map((f) => {
+    const path = normPath(f.path);
+    return { path, dir: dirOf(path), content: f.content };
+  });
+  type File = (typeof files)[number];
+  const manifests = readManifests(files, warn);
+  const cache = new Map<File, RawBlock[]>();
+  const rawOf = (f: File) => {
+    if (!cache.has(f)) cache.set(f, extractBlocks(cleanSource(f.content)));
+    return cache.get(f)!;
+  };
+  const hcl = files.filter((f) => !/\.json$/i.test(f.path));
+  const filesIn = (dir: string) => hcl.filter((f) => f.dir === dir && HCL_FILE.test(f.path));
+
+  // Directories called as modules hold module contents, not root resources.
+  const moduleDirs = new Set<string>();
+  for (const f of hcl)
+    for (const r of rawOf(f)) {
+      const src = r.kind === 'module' ? sourceOf(r.body) : undefined;
+      const dir = src && isLocalSource(src) ? joinPath(f.dir, src) : undefined;
+      if (dir !== undefined && dir !== f.dir) moduleDirs.add(dir);
+    }
+  for (const m of manifests) for (const d of m.dirs.values()) if (d !== m.root) moduleDirs.add(d);
+  const rootFiles = hcl.filter(
+    (f) => !moduleDirs.has(f.dir) && !/(^|\/)\.terraform\//.test(f.path),
+  );
+
+  const blocks: Block[] = [];
+  const outputs = new Map<string, Map<string, string>>();
+  const expanded = new Set<string>();
+  const load = (
+    scopeFiles: File[],
+    prefix: string,
+    module: string | undefined,
+    stack: string[],
+  ) => {
+    for (const f of scopeFiles)
+      for (const r of rawOf(f)) {
+        if (r.kind === 'output') {
+          if (module) outputs.get(module)!.set(r.name, r.body);
+          continue;
+        }
+        const block: Block = {
+          key: prefix + r.key,
+          type: r.type,
+          name: r.name,
+          body: r.body,
+          scope: prefix,
+          module,
+        };
+        if (r.kind === 'data') block.data = true;
+        blocks.push(block);
+        if (r.kind !== 'module') continue;
+        const label = `module "${modulePath(block.key)}"`;
+        const src = sourceOf(r.body);
+        if (!src) {
+          warn(`${label}: no source, shown as a single node`);
+          continue;
+        }
+        const dir = isLocalSource(src)
+          ? joinPath(f.dir, src)
+          : manifests.map((m) => m.dirs.get(modulePath(block.key))).find((d) => d !== undefined);
+        if (dir === undefined) {
+          warn(`${label}: remote source "${src}" shown as a single node`);
+          continue;
+        }
+        const contents = filesIn(dir);
+        if (!contents.length) {
+          warn(`${label}: source not found among files`);
+          continue;
+        }
+        if (stack.includes(dir)) {
+          warn(`${label}: recursive module call skipped`);
+          continue;
+        }
+        block.moduleGroup = true;
+        expanded.add(block.key);
+        outputs.set(block.key, new Map());
+        load(contents, `${block.key}.`, block.key, [...stack, dir]);
+      }
+  };
+  load(rootFiles, '', undefined, [...new Set(rootFiles.map((f) => f.dir))]);
+  return { blocks, outputs, expanded };
 }

@@ -1,0 +1,445 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.9.5",
+  "planned_values": {
+    "root_module": {
+      "resources": [
+        {
+          "address": "aws_instance.web[0]",
+          "mode": "managed",
+          "type": "aws_instance",
+          "name": "web",
+          "index": 0,
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "schema_version": 1,
+          "values": {
+            "id": "i-0a1b2c3d4e5f60001",
+            "arn": "arn:aws:ec2:eu-west-1:123456789012:instance/i-0a1b2c3d4e5f60001",
+            "ami": "ami-0c55b159cbfafe1f0",
+            "instance_type": "t3.small",
+            "subnet_id": "subnet-0aaa1111",
+            "vpc_security_group_ids": ["sg-0web0001"],
+            "owner_id": "123456789012",
+            "tags": { "Name": "web-0" }
+          },
+          "sensitive_values": {}
+        },
+        {
+          "address": "aws_instance.web[1]",
+          "mode": "managed",
+          "type": "aws_instance",
+          "name": "web",
+          "index": 1,
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "schema_version": 1,
+          "values": {
+            "ami": "ami-0c55b159cbfafe1f0",
+            "instance_type": "t3.small",
+            "subnet_id": "subnet-0aaa1111",
+            "vpc_security_group_ids": ["sg-0web0001"],
+            "tags": { "Name": "web-1" }
+          },
+          "sensitive_values": {}
+        },
+        {
+          "address": "aws_security_group.web",
+          "mode": "managed",
+          "type": "aws_security_group",
+          "name": "web",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "schema_version": 1,
+          "values": {
+            "id": "sg-0web0001",
+            "arn": "arn:aws:ec2:eu-west-1:123456789012:security-group/sg-0web0001",
+            "name": "web",
+            "vpc_id": "vpc-0main0001",
+            "ingress": [{ "from_port": 443, "to_port": 443, "cidr_blocks": ["0.0.0.0/0"] }]
+          },
+          "sensitive_values": {}
+        },
+        {
+          "address": "aws_sqs_queue.jobs",
+          "mode": "managed",
+          "type": "aws_sqs_queue",
+          "name": "jobs",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "schema_version": 0,
+          "values": { "name": "jobs", "visibility_timeout_seconds": 60 },
+          "sensitive_values": {}
+        },
+        {
+          "address": "aws_lambda_function.worker",
+          "mode": "managed",
+          "type": "aws_lambda_function",
+          "name": "worker",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "schema_version": 0,
+          "values": {
+            "function_name": "worker",
+            "runtime": "nodejs20.x",
+            "handler": "index.handler"
+          },
+          "sensitive_values": {}
+        },
+        {
+          "address": "aws_lambda_event_source_mapping.jobs",
+          "mode": "managed",
+          "type": "aws_lambda_event_source_mapping",
+          "name": "jobs",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "schema_version": 0,
+          "values": { "batch_size": 10, "function_name": "worker" },
+          "sensitive_values": {}
+        },
+        {
+          "address": "aws_dynamodb_table.sessions[\"eu\"]",
+          "mode": "managed",
+          "type": "aws_dynamodb_table",
+          "name": "sessions",
+          "index": "eu",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "schema_version": 1,
+          "values": {
+            "id": "sessions-eu",
+            "name": "sessions-eu",
+            "billing_mode": "PAY_PER_REQUEST"
+          },
+          "sensitive_values": {}
+        },
+        {
+          "address": "aws_dynamodb_table.sessions[\"us\"]",
+          "mode": "managed",
+          "type": "aws_dynamodb_table",
+          "name": "sessions",
+          "index": "us",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "schema_version": 1,
+          "values": {
+            "id": "sessions-us",
+            "name": "sessions-us",
+            "billing_mode": "PAY_PER_REQUEST"
+          },
+          "sensitive_values": {}
+        },
+        {
+          "address": "aws_dynamodb_table.sessions[\"ap\"]",
+          "mode": "managed",
+          "type": "aws_dynamodb_table",
+          "name": "sessions",
+          "index": "ap",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "schema_version": 1,
+          "values": { "name": "sessions-ap", "billing_mode": "PAY_PER_REQUEST" },
+          "sensitive_values": {}
+        }
+      ],
+      "child_modules": [
+        {
+          "address": "module.vpc",
+          "resources": [
+            {
+              "address": "module.vpc.aws_vpc.this",
+              "mode": "managed",
+              "type": "aws_vpc",
+              "name": "this",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 1,
+              "values": {
+                "id": "vpc-0main0001",
+                "arn": "arn:aws:ec2:eu-west-1:123456789012:vpc/vpc-0main0001",
+                "cidr_block": "10.0.0.0/16",
+                "tags": { "Name": "main" }
+              },
+              "sensitive_values": {}
+            },
+            {
+              "address": "module.vpc.aws_subnet.private[\"a\"]",
+              "mode": "managed",
+              "type": "aws_subnet",
+              "name": "private",
+              "index": "a",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 1,
+              "values": {
+                "id": "subnet-0aaa1111",
+                "arn": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-0aaa1111",
+                "vpc_id": "vpc-0main0001",
+                "cidr_block": "10.0.1.0/24",
+                "availability_zone": "eu-west-1a"
+              },
+              "sensitive_values": {}
+            },
+            {
+              "address": "module.vpc.aws_subnet.private[\"b\"]",
+              "mode": "managed",
+              "type": "aws_subnet",
+              "name": "private",
+              "index": "b",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 1,
+              "values": {
+                "id": "subnet-0bbb2222",
+                "arn": "arn:aws:ec2:eu-west-1:123456789012:subnet/subnet-0bbb2222",
+                "vpc_id": "vpc-0main0001",
+                "cidr_block": "10.0.2.0/24",
+                "availability_zone": "eu-west-1b"
+              },
+              "sensitive_values": {}
+            },
+            {
+              "address": "module.vpc.aws_route_table.private",
+              "mode": "managed",
+              "type": "aws_route_table",
+              "name": "private",
+              "provider_name": "registry.terraform.io/hashicorp/aws",
+              "schema_version": 0,
+              "values": { "id": "rtb-0private01", "vpc_id": "vpc-0main0001" },
+              "sensitive_values": {}
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "resource_changes": [
+    {
+      "address": "aws_instance.web[0]",
+      "mode": "managed",
+      "type": "aws_instance",
+      "name": "web",
+      "index": 0,
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": { "actions": ["no-op"], "before": {}, "after": {} }
+    },
+    {
+      "address": "aws_instance.web[1]",
+      "mode": "managed",
+      "type": "aws_instance",
+      "name": "web",
+      "index": 1,
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {},
+        "after_unknown": { "id": true }
+      }
+    },
+    {
+      "address": "aws_instance.legacy",
+      "mode": "managed",
+      "type": "aws_instance",
+      "name": "legacy",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["delete"],
+        "before": {
+          "id": "i-0legacy000001",
+          "subnet_id": "subnet-0bbb2222",
+          "instance_type": "t2.micro"
+        },
+        "after": null
+      },
+      "action_reason": "delete_because_no_resource_config"
+    },
+    {
+      "address": "module.vpc.aws_subnet.private[\"b\"]",
+      "module_address": "module.vpc",
+      "mode": "managed",
+      "type": "aws_subnet",
+      "name": "private",
+      "index": "b",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": { "actions": ["delete", "create"], "before": {}, "after": {} }
+    }
+  ],
+  "prior_state": {
+    "format_version": "1.0",
+    "terraform_version": "1.9.5",
+    "values": {
+      "root_module": {
+        "resources": [
+          {
+            "address": "data.aws_ami.ubuntu",
+            "mode": "data",
+            "type": "aws_ami",
+            "name": "ubuntu",
+            "provider_name": "registry.terraform.io/hashicorp/aws",
+            "schema_version": 0,
+            "values": { "id": "ami-0c55b159cbfafe1f0", "name": "ubuntu-jammy-22.04" },
+            "sensitive_values": {}
+          },
+          {
+            "address": "aws_instance.legacy",
+            "mode": "managed",
+            "type": "aws_instance",
+            "name": "legacy",
+            "provider_name": "registry.terraform.io/hashicorp/aws",
+            "schema_version": 1,
+            "values": {
+              "id": "i-0legacy000001",
+              "subnet_id": "subnet-0bbb2222",
+              "vpc_security_group_ids": ["sg-0web0001"],
+              "instance_type": "t2.micro"
+            },
+            "sensitive_values": {}
+          }
+        ]
+      }
+    }
+  },
+  "configuration": {
+    "provider_config": {
+      "aws": { "name": "aws", "full_name": "registry.terraform.io/hashicorp/aws" }
+    },
+    "root_module": {
+      "resources": [
+        {
+          "address": "aws_instance.web",
+          "mode": "managed",
+          "type": "aws_instance",
+          "name": "web",
+          "provider_config_key": "aws",
+          "expressions": {
+            "ami": { "references": ["data.aws_ami.ubuntu.id", "data.aws_ami.ubuntu"] },
+            "instance_type": { "constant_value": "t3.small" },
+            "subnet_id": {
+              "references": ["module.vpc.private_subnet_ids", "module.vpc"]
+            },
+            "vpc_security_group_ids": {
+              "references": ["aws_security_group.web.id", "aws_security_group.web"]
+            }
+          },
+          "schema_version": 1,
+          "count_expression": { "constant_value": 2 }
+        },
+        {
+          "address": "aws_security_group.web",
+          "mode": "managed",
+          "type": "aws_security_group",
+          "name": "web",
+          "provider_config_key": "aws",
+          "expressions": {
+            "name": { "constant_value": "web" },
+            "vpc_id": { "references": ["module.vpc.vpc_id", "module.vpc"] }
+          },
+          "schema_version": 1
+        },
+        {
+          "address": "aws_sqs_queue.jobs",
+          "mode": "managed",
+          "type": "aws_sqs_queue",
+          "name": "jobs",
+          "provider_config_key": "aws",
+          "expressions": { "name": { "constant_value": "jobs" } },
+          "schema_version": 0
+        },
+        {
+          "address": "aws_lambda_function.worker",
+          "mode": "managed",
+          "type": "aws_lambda_function",
+          "name": "worker",
+          "provider_config_key": "aws",
+          "expressions": {
+            "function_name": { "constant_value": "worker" },
+            "environment": [
+              {
+                "variables": {
+                  "references": [
+                    "aws_dynamodb_table.sessions",
+                    "aws_sqs_queue.jobs.url",
+                    "aws_sqs_queue.jobs"
+                  ]
+                }
+              }
+            ]
+          },
+          "schema_version": 0
+        },
+        {
+          "address": "aws_lambda_event_source_mapping.jobs",
+          "mode": "managed",
+          "type": "aws_lambda_event_source_mapping",
+          "name": "jobs",
+          "provider_config_key": "aws",
+          "expressions": {
+            "event_source_arn": { "references": ["aws_sqs_queue.jobs.arn", "aws_sqs_queue.jobs"] },
+            "function_name": {
+              "references": ["aws_lambda_function.worker.arn", "aws_lambda_function.worker"]
+            }
+          },
+          "schema_version": 0
+        },
+        {
+          "address": "aws_dynamodb_table.sessions",
+          "mode": "managed",
+          "type": "aws_dynamodb_table",
+          "name": "sessions",
+          "provider_config_key": "aws",
+          "expressions": { "billing_mode": { "constant_value": "PAY_PER_REQUEST" } },
+          "schema_version": 1,
+          "for_each_expression": { "references": ["var.regions"] }
+        },
+        {
+          "address": "data.aws_ami.ubuntu",
+          "mode": "data",
+          "type": "aws_ami",
+          "name": "ubuntu",
+          "provider_config_key": "aws",
+          "expressions": { "most_recent": { "constant_value": true } },
+          "schema_version": 0
+        }
+      ],
+      "module_calls": {
+        "vpc": {
+          "source": "./modules/vpc",
+          "expressions": { "cidr": { "constant_value": "10.0.0.0/16" } },
+          "module": {
+            "outputs": {
+              "vpc_id": { "expression": { "references": ["aws_vpc.this.id", "aws_vpc.this"] } },
+              "private_subnet_ids": {
+                "expression": { "references": ["aws_subnet.private"] }
+              }
+            },
+            "resources": [
+              {
+                "address": "aws_vpc.this",
+                "mode": "managed",
+                "type": "aws_vpc",
+                "name": "this",
+                "provider_config_key": "vpc:aws",
+                "expressions": { "cidr_block": { "references": ["var.cidr"] } },
+                "schema_version": 1
+              },
+              {
+                "address": "aws_subnet.private",
+                "mode": "managed",
+                "type": "aws_subnet",
+                "name": "private",
+                "provider_config_key": "vpc:aws",
+                "expressions": {
+                  "vpc_id": { "references": ["aws_vpc.this.id", "aws_vpc.this"] },
+                  "cidr_block": { "references": ["each.value"] }
+                },
+                "schema_version": 1,
+                "for_each_expression": { "references": ["var.private_subnets"] }
+              },
+              {
+                "address": "aws_route_table.private",
+                "mode": "managed",
+                "type": "aws_route_table",
+                "name": "private",
+                "provider_config_key": "vpc:aws",
+                "expressions": { "vpc_id": { "references": ["aws_vpc.this.id", "aws_vpc.this"] } },
+                "schema_version": 0
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "applyable": true,
+  "complete": true,
+  "errored": false
+}

@@ -1,5 +1,5 @@
 {
-  "name": "opsdraw",
+  "name": "opsdraw-monorepo",
   "private": true,
   "version": "0.1.0",
   "description": "Architecture-as-code editor: Mermaid text and a visual canvas, kept in sync.",
@@ -8,14 +8,15 @@
   "workspaces": [
     "packages/core",
     "packages/app",
-    "packages/mcp"
+    "packages/mcp",
+    "packages/cli"
   ],
   "scripts": {
     "dev": "npm run dev -w @opsdraw/app",
-    "build": "npm run build -w @opsdraw/app && npm run build -w opsdraw-mcp",
-    "test": "npm run test -w @opsdraw/core && npm run test -w opsdraw-mcp && npm run test -w @opsdraw/app",
+    "build": "npm run build -w @opsdraw/app && npm run build -w opsdraw-mcp && npm run build -w opsdraw",
+    "test": "npm run test -w @opsdraw/core && npm run test -w opsdraw-mcp && npm run test -w opsdraw && npm run test -w @opsdraw/app",
     "test:e2e": "npm run test:e2e -w @opsdraw/app",
-    "typecheck": "tsc -p packages/core && tsc -p packages/app && tsc -p packages/mcp",
+    "typecheck": "tsc -p packages/core && tsc -p packages/app && tsc -p packages/mcp && tsc -p packages/cli",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

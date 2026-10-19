@@ -1,0 +1,22 @@
+---
+title: CLI fixture
+---
+architecture-beta
+
+  group tf_main(lucide:network)[main]
+  group tf_app(lucide:network)[app] in tf_main
+
+  service tf_web(server)[web] in tf_app
+  service tf_db(database)[db] in tf_app
+  service k8s_deployment_api(lucide:split)[api]
+  service k8s_service_api(lucide:split)[api]
+
+  k8s_service_api:R --> L:k8s_deployment_api
+
+  %% @layout opsdraw canvas positions (Mermaid ignores these lines)
+  %% @pos tf_main 12 12 192 324
+  %% @pos tf_app 24 40 144 260
+  %% @pos tf_web 24 40
+  %% @pos tf_db 24 148
+  %% @pos k8s_deployment_api 276 384
+  %% @pos k8s_service_api 108 384
