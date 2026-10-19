@@ -5,6 +5,7 @@ import {
   edgeKey,
   importIac,
   layoutNewNodes,
+  lintDiagram,
   mergeLayout,
   nodeChanges,
   parseArchitecture,
@@ -15,7 +16,7 @@ import type { Diagram, LayoutDirection, ParseError, StructuralDiff, Theme } from
 import { UsageError, parseArgs } from './args';
 import type { OptionsSpec } from './args';
 import { collectIacFiles, displayPath } from './collect';
-import { createIconResolver } from './icons';
+import { createIconChecker, createIconResolver } from './icons';
 
 export interface Io {
   stdout: (text: string) => void;
@@ -33,7 +34,7 @@ const HELP = `opsdraw - architecture diagrams as code (Mermaid architecture-beta
 Usage:
   opsdraw import <path...> -o <out.mmd> [options]
   opsdraw export <in.mmd> -o <out.svg> [--theme light|dark|auto]
-  opsdraw validate <file.mmd...>
+  opsdraw validate <file.mmd...> [--strict]
   opsdraw <command> --help
   opsdraw --version
 
@@ -43,7 +44,8 @@ Commands:
             layout is kept and only new nodes are laid out. --check verifies instead of writing.
   export    Render a diagram to SVG using its stored layout. PNG is not supported in the CLI
             yet (use the OpsDraw app for PNG).
-  validate  Parse diagrams and report problems as file:line: message.
+  validate  Parse diagrams and report problems as file:line: message, plus lint warnings
+            (edges sharing a node side, unknown icons, ...). --strict fails on warnings.
 
 Exit codes: 0 ok, 1 errors or drift (--check), 2 usage error or missing file.
 `;
@@ -81,9 +83,23 @@ Options:
   -h, --help            Show this help.
 `;
 
-const VALIDATE_HELP = `Usage: opsdraw validate <file.mmd...>
+const VALIDATE_HELP = `Usage: opsdraw validate <file.mmd...> [--strict]
 
-Parses each diagram and prints problems as file:line: message. Exits 1 if any file has errors.
+Parses each diagram and prints problems as file:line: message. Diagrams that parse are also
+linted, printed as file[:line]: <warning|info> [code] message:
+
+  port-conflict   warning  more than one edge on the same side of a node (Mermaid allows one)
+  unknown-icon    warning  built-in or lucide: icon that doesn't exist, with suggestions
+  github-icons    info     icons GitHub/GitLab can't draw; export an SVG or use built-ins
+  empty-group     info     group with nothing inside
+  isolated-node   info     service without edges (only in diagrams with 3+ edges)
+
+Exits 1 if any file has errors, 2 if a file is missing. Lint issues don't change the exit
+code unless --strict is given.
+
+Options:
+      --strict   Exit 1 on lint warnings too (info issues never fail).
+  -h, --help     Show this help.
 `;
 
 const HELP_OPT: OptionsSpec = { help: { type: 'boolean', short: 'h' } };
@@ -310,14 +326,22 @@ async function cmdExport(argv: string[], io: Io): Promise<number> {
 }
 
 async function cmdValidate(argv: string[], io: Io): Promise<number> {
-  const { positionals, options } = parseArgs(argv, HELP_OPT);
+  const { positionals, options } = parseArgs(argv, {
+    ...HELP_OPT,
+    strict: { type: 'boolean' },
+  });
   if (options.help) {
     io.stdout(VALIDATE_HELP);
     return EXIT.ok;
   }
   if (!positionals.length) throw new UsageError('validate needs at least one diagram');
+  const checker = createIconChecker();
+  const lintOptions = checker
+    ? { knownIcons: checker.knownIcons, iconCandidates: checker.candidates }
+    : {};
   let failed = false;
   let missing = false;
+  let warned = false;
   for (const file of positionals) {
     const abs = path.resolve(io.cwd, file);
     const name = displayPath(io.cwd, abs);
@@ -331,11 +355,18 @@ async function cmdValidate(argv: string[], io: Io): Promise<number> {
     if (errors.length) {
       io.stderr(formatErrors(name, errors));
       failed = true;
-    } else {
-      io.stdout(`${name}: ok (${diagram.nodes.length} nodes, ${diagram.edges.length} edges)\n`);
+      continue;
+    }
+    io.stdout(`${name}: ok (${diagram.nodes.length} nodes, ${diagram.edges.length} edges)\n`);
+    // Lint only diagrams that parse; issues never fail the run unless --strict sees a warning.
+    for (const issue of lintDiagram(diagram, { ...lintOptions, source: text })) {
+      if (issue.severity === 'warning') warned = true;
+      const where = issue.line === undefined ? name : `${name}:${issue.line}`;
+      io.stderr(`${where}: ${issue.severity} [${issue.code}] ${issue.message}\n`);
     }
   }
-  return failed ? EXIT.fail : missing ? EXIT.usage : EXIT.ok;
+  if (failed || (options.strict && warned)) return EXIT.fail;
+  return missing ? EXIT.usage : EXIT.ok;
 }
 
 const COMMANDS: Record<string, (argv: string[], io: Io) => Promise<number>> = {

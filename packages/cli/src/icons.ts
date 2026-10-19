@@ -49,3 +49,27 @@ export function createIconResolver(): {
   };
   return { resolve, unresolved };
 }
+
+/**
+ * Icon checks for `validate`: bare names must be Mermaid built-ins and `lucide:` names must exist
+ * in the bundled set. Other prefixes are user-imported packs and are accepted. Returns no
+ * checker when the Lucide set can't be loaded.
+ */
+export function createIconChecker(): {
+  knownIcons: (ref: string) => boolean;
+  candidates: string[];
+} | null {
+  const set = loadLucide();
+  if (!set) return null;
+  const names = [...Object.keys(set.icons), ...Object.keys(set.aliases ?? {})];
+  const lucideNames = new Set(names);
+  const knownIcons = (ref: string) => {
+    const { prefix, name } = parseIconRef(ref);
+    if (prefix === null) return Object.hasOwn(BUILTIN_TO_LUCIDE, name);
+    return prefix !== 'lucide' || lucideNames.has(name);
+  };
+  return {
+    knownIcons,
+    candidates: [...Object.keys(BUILTIN_TO_LUCIDE), ...names.map((n) => `lucide:${n}`)],
+  };
+}

@@ -51,6 +51,20 @@ const ja: Messages = {
     invalidId: 'ID は英字で始まり、英字・数字・_・- のみ使用できます。',
     takenId: 'その ID は既に使用されています。',
     empty: '編集するノードまたは接続を選択してください。',
+    multiSelected: '{{count}} 個を選択中',
+    align: '整列',
+    alignLeft: '左揃え',
+    alignCenter: '左右中央揃え',
+    alignRight: '右揃え',
+    alignTop: '上揃え',
+    alignMiddle: '上下中央揃え',
+    alignBottom: '下揃え',
+    distribute: '等間隔に配置',
+    distributeHorizontal: '左右に等間隔で配置',
+    distributeVertical: '上下に等間隔で配置',
+    notSiblings: '整列は同じグループ内のノードに使えます。親が同じノードを選択してください。',
+    distributeHint: '等間隔に配置するには 3 個以上のノードを選択してください。',
+    nudgeHint: '矢印キーで選択を 8 px 移動します。Shift を押すと 1 px です。',
   },
   editor: {
     errors_one: '{{count}} 件の問題',
@@ -88,6 +102,11 @@ const ja: Messages = {
     reservedPrefix: '「{{prefix}}」は予約されています。',
     icons_one: '{{count}} 個のアイコン',
     icons_other: '{{count}} 個のアイコン',
+  },
+  preview: {
+    githubIcons:
+      'GitHub と GitLab が表示できるのは組み込みアイコン（cloud、database、disk、internet、server）だけで、それ以外のアイコンはプレースホルダーになります。見たままの図を共有するには、エクスポートした SVG をこのファイルの隣にコミットしてください。',
+    useBuiltins: '可能な限り組み込みアイコンを使う',
   },
   status: {
     saved: '保存しました',

@@ -51,6 +51,21 @@ const de: Messages = {
     invalidId: 'IDs beginnen mit einem Buchstaben und enthalten Buchstaben, Ziffern, _ oder -.',
     takenId: 'Diese ID wird bereits verwendet.',
     empty: 'Wähle einen Knoten oder eine Verbindung zum Bearbeiten aus.',
+    multiSelected: '{{count}} ausgewählt',
+    align: 'Ausrichten',
+    alignLeft: 'Links ausrichten',
+    alignCenter: 'Horizontal zentrieren',
+    alignRight: 'Rechts ausrichten',
+    alignTop: 'Oben ausrichten',
+    alignMiddle: 'Vertikal zentrieren',
+    alignBottom: 'Unten ausrichten',
+    distribute: 'Verteilen',
+    distributeHorizontal: 'Horizontal verteilen',
+    distributeVertical: 'Vertikal verteilen',
+    notSiblings:
+      'Ausrichten funktioniert für Knoten in derselben Gruppe. Wähle Knoten mit demselben übergeordneten Element aus.',
+    distributeHint: 'Wähle mindestens drei Knoten aus, um sie zu verteilen.',
+    nudgeHint: 'Pfeiltasten verschieben die Auswahl um 8 px, mit Umschalt um 1 px.',
   },
   editor: {
     errors_one: '{{count}} Problem',
@@ -89,6 +104,11 @@ const de: Messages = {
     reservedPrefix: '„{{prefix}}“ ist reserviert.',
     icons_one: '{{count}} Icon',
     icons_other: '{{count}} Icons',
+  },
+  preview: {
+    githubIcons:
+      'GitHub und GitLab zeigen nur die eingebauten Symbole (cloud, database, disk, internet, server); andere Symbole erscheinen dort als Platzhalter. Um das Bild so zu teilen, wie du es siehst, committe eine exportierte SVG neben dieser Datei.',
+    useBuiltins: 'Wo möglich eingebaute Symbole verwenden',
   },
   status: { saved: 'Gespeichert', terraformImported: '{{count}} Ressourcen importiert' },
 };

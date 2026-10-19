@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync, readFileSync, mkdirSync, existsSync
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { parseArchitecture } from '@opsdraw/core';
+import { parseArchitecture, serializeArchitecture } from '@opsdraw/core';
 import * as tools from '../src/tools';
 
 let root: string;
@@ -95,6 +95,43 @@ describe('editing', () => {
     await expect(
       tools.addService(ctx, { path: 'd.mmd', label: 'X', icon: 'bad)icon' }),
     ).rejects.toThrow(/Invalid icon/);
+  });
+
+  it('rejects unknown icons with suggestions, but accepts vendor prefixes', async () => {
+    await expect(
+      tools.addService(ctx, { path: 'd.mmd', label: 'X', icon: 'lucide:servr' }),
+    ).rejects.toThrow(/Unknown icon "lucide:servr": did you mean lucide:server/);
+    await expect(tools.addGroup(ctx, { path: 'd.mmd', label: 'G', icon: 'cpu' })).rejects.toThrow(
+      /did you mean .*lucide:cpu/,
+    );
+    await expect(
+      tools.addService(ctx, { path: 'd.mmd', label: 'P', icon: 'postgres' }),
+    ).rejects.toThrow(/did you mean database/);
+    const ok = await tools.addService(ctx, { path: 'd.mmd', label: 'L', icon: 'aws:lambda' });
+    expect(ok.diff).toEqual({ added: ['l'] });
+    await tools.addService(ctx, { path: 'd.mmd', label: 'C', icon: 'lucide:container' });
+    await expect(
+      tools.updateNode(ctx, { path: 'd.mmd', id: 'c', icon: 'lucide:databse' }),
+    ).rejects.toThrow(/did you mean lucide:database/);
+    expect(parseArchitecture(fileText('d.mmd')).diagram.nodes.map((n) => n.icon)).toEqual([
+      'aws:lambda',
+      'lucide:container',
+    ]);
+  });
+
+  it('returns compact diffs from mutating tools', async () => {
+    await tools.addService(ctx, { path: 'd.mmd', id: 'a', label: 'A' });
+    await tools.addService(ctx, { path: 'd.mmd', id: 'b', label: 'B' });
+    expect((await tools.connect(ctx, { path: 'd.mmd', from: 'a', to: 'b' })).diff).toEqual({
+      addedEdges: ['a->b'],
+    });
+    expect((await tools.updateNode(ctx, { path: 'd.mmd', id: 'a', label: 'AA' })).diff).toEqual({
+      changed: ['a'],
+    });
+    expect((await tools.removeNode(ctx, { path: 'd.mmd', id: 'b' })).diff).toEqual({
+      removed: ['b'],
+      removedEdges: ['a->b'],
+    });
   });
 
   it('connects with arrows, labels and position-based sides, then disconnects', async () => {
@@ -235,6 +272,29 @@ describe('write_diagram / validate', () => {
     expect((await tools.validate(ctx, { path: 'v.mmd' })).valid).toBe(true);
     await expect(tools.validate(ctx, {})).rejects.toThrow(/exactly one/);
   });
+
+  it('returns lint issues alongside parse errors', async () => {
+    const r = await tools.validate(ctx, {
+      mermaid: [
+        'architecture-beta',
+        '  service lb(lucide:servr)[LB]',
+        '  service a(server)[A]',
+        '  service b(server)[B]',
+        '  lb:R --> L:a',
+        '  lb:R --> L:b',
+        '',
+      ].join('\n'),
+    });
+    expect(r.valid).toBe(true);
+    const byCode = Object.fromEntries(r.issues.map((i) => [i.code, i]));
+    expect(byCode['port-conflict']).toMatchObject({ severity: 'warning', nodeId: 'lb', line: 2 });
+    expect(byCode['unknown-icon']?.message).toMatch(/did you mean lucide:server/);
+    expect(byCode['github-icons']).toMatchObject({ severity: 'info' });
+    const clean = await tools.validate(ctx, {
+      mermaid: 'architecture-beta\n  service a(server)[A]\n',
+    });
+    expect(clean.issues).toEqual([]);
+  });
 });
 
 describe('import_terraform', () => {
@@ -269,9 +329,9 @@ resource "aws_security_group_rule" "allow" {
     expect(diagram.edges.some((e) => [e.from, e.to].sort().join() === 'app,db')).toBe(true);
     for (const n of diagram.nodes) expect(diagram.layout[n.id]).toBeDefined();
 
-    await expect(
-      tools.importTerraform(ctx, { source: 'infra', output: 'out/infra.mmd' }),
-    ).rejects.toThrow(/already exists/);
+    // Re-importing over an existing file merges instead of failing.
+    const again = await tools.importTerraform(ctx, { source: 'infra', output: 'out/infra.mmd' });
+    expect(again).toMatchObject({ merged: true, unchanged: true, added: [], removed: [] });
   });
 
   it('reads subdirectories only when recursive', async () => {
@@ -396,6 +456,36 @@ spec: { selector: { app: api }, ports: [{ port: 80 }] }
     expect(r.kinds.sort()).toEqual(['ansible', 'nomad']);
     expect(r.files.sort()).toEqual(['ops/hosts', 'ops/shop.nomad']);
     expect(parseArchitecture(fileText('ops.mmd')).errors).toEqual([]);
+  });
+
+  it('merges into an existing diagram, keeping hand-made positions', async () => {
+    write('net/compose.yml', 'services:\n  web:\n    image: nginx\n  db:\n    image: postgres\n');
+    await tools.importIacFiles(ctx, { source: 'net', output: 'net.mmd' });
+    const first = parseArchitecture(fileText('net.mmd')).diagram;
+    const moved = { ...first, layout: { ...first.layout, web: { x: 900, y: 700 } } };
+    writeFileSync(path.join(root, 'net.mmd'), serializeArchitecture(moved));
+
+    write(
+      'net/compose.yml',
+      'services:\n  web:\n    image: nginx\n  db:\n    image: postgres\n  cache:\n    image: redis\n',
+    );
+    const r = await tools.importIacFiles(ctx, { source: 'net', output: 'net.mmd' });
+    expect(r).toMatchObject({ merged: true, added: ['cache'], removed: [], changed: [] });
+    const after = parseArchitecture(fileText('net.mmd')).diagram;
+    expect(after.layout.web).toEqual({ x: 900, y: 700 });
+    expect(after.layout.db).toEqual(first.layout.db);
+    expect(after.layout.cache).toBeDefined();
+
+    const replaced = await tools.importIacFiles(ctx, {
+      source: 'net',
+      output: 'net.mmd',
+      overwrite: true,
+    });
+    expect(replaced.merged).toBe(false);
+    expect(parseArchitecture(fileText('net.mmd')).diagram.layout.web).not.toEqual({
+      x: 900,
+      y: 700,
+    });
   });
 
   it('fails clearly when nothing is recognized, and respects the root', async () => {

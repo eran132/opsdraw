@@ -51,6 +51,21 @@ const fr: Messages = {
     invalidId: 'Les ids commencent par une lettre et contiennent des lettres, chiffres, _ ou -.',
     takenId: 'Cet id est déjà utilisé.',
     empty: 'Sélectionnez un nœud ou une connexion pour le modifier.',
+    multiSelected: '{{count}} sélectionnés',
+    align: 'Aligner',
+    alignLeft: 'Aligner à gauche',
+    alignCenter: 'Centrer horizontalement',
+    alignRight: 'Aligner à droite',
+    alignTop: 'Aligner en haut',
+    alignMiddle: 'Centrer verticalement',
+    alignBottom: 'Aligner en bas',
+    distribute: 'Répartir',
+    distributeHorizontal: 'Répartir horizontalement',
+    distributeVertical: 'Répartir verticalement',
+    notSiblings:
+      "L'alignement s'applique aux nœuds d'un même groupe. Sélectionnez des nœuds qui ont le même parent.",
+    distributeHint: 'Sélectionnez au moins trois nœuds pour les répartir.',
+    nudgeHint: 'Les flèches déplacent la sélection de 8 px ; avec Maj, de 1 px.',
   },
   editor: {
     errors_one: '{{count}} problème',
@@ -89,6 +104,11 @@ const fr: Messages = {
     reservedPrefix: '« {{prefix}} » est réservé.',
     icons_one: '{{count}} icône',
     icons_other: '{{count}} icônes',
+  },
+  preview: {
+    githubIcons:
+      "GitHub et GitLab n'affichent que les icônes intégrées (cloud, database, disk, internet, server) ; les autres y apparaissent comme des espaces réservés. Pour partager le schéma tel que vous le voyez, ajoutez un SVG exporté à côté de ce fichier.",
+    useBuiltins: 'Utiliser les icônes intégrées si possible',
   },
   status: { saved: 'Enregistré', terraformImported: '{{count}} ressources importées' },
 };

@@ -27,7 +27,26 @@ import {
 } from '@opsdraw/core';
 import { CanvasActionsContext, nodeTypes, type ArchFlowNode } from './nodes';
 
-export type Selection = { type: 'node'; id: string } | { type: 'edge'; index: number } | null;
+export type Selection =
+  | { type: 'node'; id: string }
+  | { type: 'nodes'; ids: string[] }
+  | { type: 'edge'; index: number }
+  | null;
+
+/** Ids of the selected nodes, whatever the kind of selection. */
+export const selectedNodeIds = (s: Selection): string[] =>
+  s?.type === 'node' ? [s.id] : s?.type === 'nodes' ? s.ids : [];
+
+/** Diagrams bigger than this only draw what is in view. */
+export const LARGE_DIAGRAM = 200;
+
+const NUDGE_COMMIT_MS = 400;
+const ARROWS: Record<string, [number, number]> = {
+  ArrowLeft: [-1, 0],
+  ArrowRight: [1, 0],
+  ArrowUp: [0, -1],
+  ArrowDown: [0, 1],
+};
 
 /** What the palette puts on the drag payload. */
 export interface PaletteItem {
@@ -50,16 +69,19 @@ interface Props {
   onEditLabel(): void;
 }
 
-function depthOf(d: Diagram, n: ArchNode): number {
+function depthOf(d: Diagram, n: ArchNode, byId?: Map<string, ArchNode>): number {
+  const find = (id: string) => byId?.get(id) ?? d.nodes.find((x) => x.id === id);
   let depth = 0;
-  for (let p = n.parent; p && depth < 64; p = d.nodes.find((x) => x.id === p)?.parent) depth++;
+  for (let p = n.parent; p && depth < 64; p = find(p)?.parent) depth++;
   return depth;
 }
 
-function toFlowNodes(d: Diagram, selectedId: string | null): ArchFlowNode[] {
+function toFlowNodes(d: Diagram, selected: ReadonlySet<string>): ArchFlowNode[] {
   const fallbackIndex = new Map<string | undefined, number>();
+  const byId = new Map(d.nodes.map((n) => [n.id, n]));
+  const depth = new Map(d.nodes.map((n) => [n.id, depthOf(d, n, byId)]));
   // Parents must come before children for the canvas to nest them.
-  const ordered = [...d.nodes].sort((a, b) => depthOf(d, a) - depthOf(d, b));
+  const ordered = [...d.nodes].sort((a, b) => depth.get(a.id)! - depth.get(b.id)!);
   return ordered.map((n) => {
     let l = d.layout[n.id];
     if (!l) {
@@ -73,9 +95,9 @@ function toFlowNodes(d: Diagram, selectedId: string | null): ArchFlowNode[] {
       type: n.kind,
       position: { x: l.x, y: l.y },
       data: { label: n.label ?? n.id, icon: n.icon },
-      selected: n.id === selectedId,
+      selected: selected.has(n.id),
     };
-    if (n.parent && d.nodes.some((p) => p.id === n.parent)) node.parentId = n.parent;
+    if (n.parent && byId.has(n.parent)) node.parentId = n.parent;
     if (n.kind === 'group') {
       node.width = l.w ?? GROUP_DEFAULT.w;
       node.height = l.h ?? GROUP_DEFAULT.h;
@@ -102,16 +124,21 @@ function toFlowEdges(d: Diagram, selectedIndex: number | null): Edge[] {
 
 export function Canvas({ diagram, onChange, selection, onSelect, fitKey, onEditLabel }: Props) {
   const rf = useReactFlow<ArchFlowNode>();
-  const selectedId = selection?.type === 'node' ? selection.id : null;
+  const selectedKey = selectedNodeIds(selection).join('\n');
   const selectedEdge = selection?.type === 'edge' ? selection.index : null;
-  const [nodes, setNodes] = useState<ArchFlowNode[]>(() => toFlowNodes(diagram, selectedId));
+  const [nodes, setNodes] = useState<ArchFlowNode[]>(() =>
+    toFlowNodes(diagram, new Set(selectedNodeIds(selection))),
+  );
   const edges = useMemo(() => toFlowEdges(diagram, selectedEdge), [diagram, selectedEdge]);
   const diagramRef = useRef(diagram);
   diagramRef.current = diagram;
+  const nodesRef = useRef(nodes);
+  nodesRef.current = nodes;
+  const container = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setNodes(toFlowNodes(diagram, selectedId));
-  }, [diagram, selectedId]);
+    setNodes(toFlowNodes(diagram, new Set(selectedKey ? selectedKey.split('\n') : [])));
+  }, [diagram, selectedKey]);
 
   useEffect(() => {
     // Let the canvas measure the new nodes first.
@@ -232,7 +259,8 @@ export function Canvas({ diagram, onChange, selection, onSelect, fitKey, onEditL
 
   const onSelectionChange = useCallback(
     ({ nodes: ns, edges: es }: OnSelectionChangeParams) => {
-      if (ns.length === 1 && !es.length) onSelect({ type: 'node', id: ns[0]!.id });
+      if (ns.length > 1) onSelect({ type: 'nodes', ids: ns.map((n) => n.id) });
+      else if (ns.length === 1 && !es.length) onSelect({ type: 'node', id: ns[0]!.id });
       else if (es.length === 1 && !ns.length)
         onSelect({ type: 'edge', index: Number(es[0]!.id.slice(1)) });
       else if (!ns.length && !es.length) onSelect(null);
@@ -288,9 +316,96 @@ export function Canvas({ diagram, onChange, selection, onSelect, fitKey, onEditL
     [onChange],
   );
 
+  /**
+   * Arrow-key nudges move the selection right away and are written to the diagram once the keys
+   * go quiet, so a burst of presses is a single undo step.
+   */
+  const nudge = useRef<{
+    start: Map<string, { x: number; y: number }>;
+    dx: number;
+    dy: number;
+    timer: ReturnType<typeof setTimeout> | undefined;
+  } | null>(null);
+
+  const commitNudge = useCallback(() => {
+    const n = nudge.current;
+    if (!n) return;
+    clearTimeout(n.timer);
+    nudge.current = null;
+    if (!n.dx && !n.dy) return;
+    const d = diagramRef.current;
+    const layout = { ...d.layout };
+    for (const [id, p] of n.start) layout[id] = { ...layout[id], x: p.x + n.dx, y: p.y + n.dy };
+    onChange({ ...d, layout });
+  }, [onChange]);
+
+  const commitNudgeRef = useRef(commitNudge);
+  commitNudgeRef.current = commitNudge;
+  useEffect(() => () => commitNudgeRef.current(), []);
+
+  const onKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('input, textarea, select, [contenteditable="true"]')) return;
+      const dir = ARROWS[e.key];
+      if (!dir || e.ctrlKey || e.metaKey || e.altKey) {
+        commitNudge();
+        return;
+      }
+      const all = nodesRef.current;
+      const selected = new Set(all.filter((n) => n.selected).map((n) => n.id));
+      const byId = new Map(all.map((n) => [n.id, n]));
+      // A child already moves with its group; moving it too would double the step.
+      const hasSelectedAncestor = (n: ArchFlowNode) => {
+        for (let p = n.parentId, i = 0; p && i < 64; p = byId.get(p)?.parentId, i++)
+          if (selected.has(p)) return true;
+        return false;
+      };
+      const moving = all.filter((n) => n.selected && !hasSelectedAncestor(n));
+      if (!moving.length) return;
+      e.preventDefault();
+      const ids = moving.map((n) => n.id).join('\n');
+      if (nudge.current && [...nudge.current.start.keys()].join('\n') !== ids) commitNudge();
+      const burst = (nudge.current ??= {
+        start: new Map(moving.map((n) => [n.id, { ...n.position }])),
+        dx: 0,
+        dy: 0,
+        timer: undefined,
+      });
+      const step = e.shiftKey ? 1 : 8;
+      burst.dx += dir[0] * step;
+      burst.dy += dir[1] * step;
+      setNodes((ns) =>
+        ns.map((n) => {
+          const s = burst.start.get(n.id);
+          return s ? { ...n, position: { x: s.x + burst.dx, y: s.y + burst.dy } } : n;
+        }),
+      );
+      clearTimeout(burst.timer);
+      burst.timer = setTimeout(commitNudge, NUDGE_COMMIT_MS);
+    },
+    [commitNudge],
+  );
+
   return (
     <CanvasActionsContext.Provider value={actions}>
-      <div className="canvas" dir="ltr" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
+      <div
+        ref={container}
+        className="canvas"
+        dir="ltr"
+        // Focusable so arrow keys reach it after a click on the empty pane, not only on a node.
+        tabIndex={-1}
+        onMouseDownCapture={() => {
+          const el = container.current;
+          if (el && !el.contains(document.activeElement)) el.focus({ preventScroll: true });
+        }}
+        onKeyDown={onKeyDown}
+        onBlur={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) commitNudge();
+        }}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={onDrop}
+      >
         <ReactFlow<ArchFlowNode>
           nodes={nodes}
           edges={edges}
@@ -303,6 +418,10 @@ export function Canvas({ diagram, onChange, selection, onSelect, fitKey, onEditL
           onNodeDoubleClick={onEditLabel}
           connectionMode={ConnectionMode.Loose}
           deleteKeyCode={['Delete', 'Backspace']}
+          multiSelectionKeyCode={['Shift', 'Meta', 'Control']}
+          // Arrow keys are handled above, in grid steps and as one undoable change.
+          disableKeyboardA11y
+          onlyRenderVisibleElements={diagram.nodes.length > LARGE_DIAGRAM}
           colorMode="system"
           snapToGrid
           snapGrid={[8, 8]}

@@ -8,9 +8,13 @@ import {
   JUNCTION_SIZE,
   autoLayout,
   descendantsOf,
+  diffStructure,
   emptyDiagram,
   isValidId,
+  layoutNewNodes,
+  lintDiagram,
   makeId,
+  mergeLayout,
   parseArchitecture,
   parseMermaid,
   importIac,
@@ -19,6 +23,7 @@ import {
   renameNode,
   serializeArchitecture,
   sidesFor,
+  suggestIcons,
 } from '@opsdraw/core';
 import type {
   ArchEdge,
@@ -29,6 +34,7 @@ import type {
   ParseError,
   Side,
   IacKind,
+  LintIssue,
   TerraformFile,
 } from '@opsdraw/core';
 
@@ -256,6 +262,38 @@ function checkParent(d: Diagram, parent: string | undefined): void {
   if (p.kind !== 'group') throw new ToolError(`Parent "${parent}" is a ${p.kind}, not a group`);
 }
 
+/**
+ * Whether an icon reference is known: a Mermaid built-in, a Lucide icon (`lucide:<name>`), or
+ * any other `prefix:name`, since vendor packs are imported by users and can't be checked here.
+ * When the Lucide list can't be loaded, every `lucide:` name is accepted.
+ */
+export function isKnownIcon(ref: string): boolean {
+  const i = ref.indexOf(':');
+  if (i === -1) return (MERMAID_BUILTIN_ICONS as readonly string[]).includes(ref);
+  if (ref.slice(0, i) !== 'lucide') return true;
+  const names = loadLucide();
+  return !names.length || lucideSet().has(ref.slice(i + 1));
+}
+
+let lucideLookup: Set<string> | undefined;
+const lucideSet = () => (lucideLookup ??= new Set(loadLucide()));
+
+/** Icon refs suggestions are drawn from: built-ins and every Lucide icon. */
+const iconCandidates = (): string[] => [
+  ...MERMAID_BUILTIN_ICONS,
+  ...loadLucide().map((n) => `lucide:${n}`),
+];
+
+/** Up to three replacements for an unknown icon: keyword matches first, then close spellings. */
+export function iconSuggestions(ref: string): string[] {
+  const name = ref.slice(ref.indexOf(':') + 1);
+  const byKeyword = name
+    ? listIcons({ query: name.replace(/[-_]+/g, ' '), limit: 3 }).icons.map((h) => h.ref)
+    : [];
+  const out = [...new Set([...byKeyword, ...suggestIcons(ref, iconCandidates(), 3)])];
+  return out.slice(0, 3);
+}
+
 function checkIcon(icon: string | undefined): void {
   if (icon === undefined || icon === '') return;
   if (!ICON_RE.test(icon)) {
@@ -263,6 +301,44 @@ function checkIcon(icon: string | undefined): void {
       `Invalid icon "${icon}": use a built-in name (e.g. "server") or "prefix:name" (e.g. "lucide:database")`,
     );
   }
+  if (!isKnownIcon(icon)) {
+    const tips = iconSuggestions(icon);
+    const hint = tips.length ? `did you mean ${tips.join(', ')}? ` : '';
+    throw new ToolError(
+      `Unknown icon "${icon}": ${hint}Use a Mermaid built-in (${MERMAID_BUILTIN_ICONS.join(', ')}), lucide:<name>, or a vendor prefix the user imported (aws:, azure:, ...). Search with list_icons.`,
+    );
+  }
+}
+
+/** Compact structural diff: only the non-empty lists of node ids and `from->to` edge keys. */
+export function compactDiff(before: Diagram, after: Diagram) {
+  const d = diffStructure(before, after);
+  const out: Partial<
+    Record<
+      'added' | 'removed' | 'changed' | 'addedEdges' | 'removedEdges' | 'changedEdges',
+      string[]
+    >
+  > = {};
+  for (const k of [
+    'added',
+    'removed',
+    'changed',
+    'addedEdges',
+    'removedEdges',
+    'changedEdges',
+  ] as const) {
+    if (d[k].length) out[k] = d[k];
+  }
+  return out;
+}
+
+/** Lint issues for a diagram, with unknown-icon checks using the same rules as the tools. */
+export function lint(diagram: Diagram, source?: string): LintIssue[] {
+  return lintDiagram(diagram, {
+    knownIcons: isKnownIcon,
+    iconCandidates: iconCandidates(),
+    source,
+  });
 }
 
 function checkNewId(d: Diagram, id: string): void {
@@ -315,12 +391,18 @@ export async function writeDiagram(
     return { written: false, kind: parsed.kind, errors: parsed.errors };
   }
   const { diagram, laidOut } = await maybeLayout(parsed.diagram, args.layout, args.direction);
+  const before = await fs
+    .readFile(abs, 'utf8')
+    .then((t) => parseArchitecture(t))
+    .catch(() => null);
   const mermaid = await saveDiagram(abs, diagram);
   return {
     written: true,
     path: display(ctx, abs),
     convertedFromFlowchart: parsed.kind === 'flowchart',
     laidOut,
+    /** Omitted when the file is new or did not parse before. */
+    diff: before && !before.errors.length ? compactDiff(before.diagram, diagram) : undefined,
     summary: summarize(diagram),
     mermaid,
   };
@@ -357,7 +439,7 @@ async function addNode(ctx: ToolContext, kind: NodeKind, args: AddNodeArgs) {
   const next = { ...diagram, nodes: [...diagram.nodes, node] };
   const { diagram: out, laidOut } = await maybeLayout(next, args.layout);
   await saveDiagram(abs, out);
-  return { id, kind, laidOut, path: display(ctx, abs) };
+  return { id, kind, laidOut, path: display(ctx, abs), diff: { added: [id] } };
 }
 
 export const addService = (ctx: ToolContext, args: AddNodeArgs & { label: string }) =>
@@ -433,10 +515,12 @@ export async function connect(
   if (args.label?.trim()) edge.label = args.label.trim();
   if (args.fromGroup) edge.fromGroup = true;
   if (args.toGroup) edge.toGroup = true;
-  await saveDiagram(abs, { ...diagram, edges: [...diagram.edges, edge] });
+  const next = { ...diagram, edges: [...diagram.edges, edge] };
+  await saveDiagram(abs, next);
   return {
     edge: summarize({ ...emptyDiagram(), edges: [edge] }).edges[0],
     path: display(ctx, abs),
+    diff: compactDiff(diagram, next),
   };
 }
 
@@ -449,8 +533,9 @@ export async function disconnect(
     (e.from === args.from && e.to === args.to) || (e.from === args.to && e.to === args.from);
   const removed = diagram.edges.filter(match).length;
   if (!removed) throw new ToolError(`No edge between "${args.from}" and "${args.to}"`);
-  await saveDiagram(abs, { ...diagram, edges: diagram.edges.filter((e) => !match(e)) });
-  return { removed, path: display(ctx, abs) };
+  const next = { ...diagram, edges: diagram.edges.filter((e) => !match(e)) };
+  await saveDiagram(abs, next);
+  return { removed, path: display(ctx, abs), diff: compactDiff(diagram, next) };
 }
 
 export async function updateNode(
@@ -527,7 +612,13 @@ export async function updateNode(
 
   const { diagram: out, laidOut } = await maybeLayout(d, moved ? args.layout : false);
   await saveDiagram(abs, out);
-  return { id, changed: changes, laidOut, path: display(ctx, abs) };
+  return {
+    id,
+    changed: changes,
+    laidOut,
+    path: display(ctx, abs),
+    diff: compactDiff(diagram, out),
+  };
 }
 
 export async function removeNode(ctx: ToolContext, args: { path: string; id: string }) {
@@ -538,7 +629,7 @@ export async function removeNode(ctx: ToolContext, args: { path: string; id: str
   const removedNodes = diagram.nodes.filter((n) => !left.has(n.id)).map((n) => n.id);
   const removedEdges = diagram.edges.length - next.edges.length;
   await saveDiagram(abs, next);
-  return { removedNodes, removedEdges, path: display(ctx, abs) };
+  return { removedNodes, removedEdges, path: display(ctx, abs), diff: compactDiff(diagram, next) };
 }
 
 export async function autoLayoutFile(
@@ -611,15 +702,55 @@ async function collectSources(
 const collectTerraform = (ctx: ToolContext, source: string, recursive: boolean) =>
   collectSources(ctx, source, recursive, TERRAFORM_EXTENSIONS, 'Terraform');
 
-async function assertWritable(out: string, display: string, overwrite?: boolean) {
-  if (overwrite) return;
-  const exists = await fs
-    .stat(out)
-    .then(() => true)
-    .catch(() => false);
-  if (exists)
-    throw new ToolError(`"${display}" already exists (pass overwrite: true to replace it)`);
+/**
+ * Writes an imported diagram. A new file (or `overwrite: true`) is auto-laid out from scratch.
+ * An existing file is merged like the CLI does: positions, group sizes and edge sides of nodes
+ * that are still there are kept, and only new nodes are laid out.
+ */
+async function writeImported(
+  out: string,
+  name: string,
+  imported: Diagram,
+  direction: LayoutDirection | undefined,
+  overwrite: boolean | undefined,
+) {
+  const dir = direction ?? 'RIGHT';
+  const existing = overwrite ? null : await fs.readFile(out, 'utf8').catch(() => null);
+  if (existing === null) {
+    const diagram = await autoLayout(imported, dir);
+    return { diagram, mermaid: await saveDiagram(out, diagram), merged: false as const };
+  }
+  const prev = parseArchitecture(existing);
+  if (prev.errors.length)
+    throw new ToolError(
+      `"${name}" exists but has parse errors, so its layout can't be merged (fix it, or pass overwrite: true to replace it):\n${formatErrors(prev.errors)}`,
+    );
+  const m = mergeLayout(prev.diagram, imported);
+  const diagram = await layoutNewNodes(m.diagram, new Set(m.kept), {
+    direction: dir,
+    pinnedEdges: new Set(m.keptEdges),
+  });
+  const text = serializeArchitecture(diagram);
+  if (text !== existing) await writeText(out, text);
+  return {
+    diagram,
+    mermaid: text,
+    merged: true as const,
+    unchanged: text === existing,
+    added: m.added,
+    removed: m.removed,
+    changed: m.changed,
+    addedEdges: m.addedEdges,
+    removedEdges: m.removedEdges,
+    kept: m.kept.length,
+  };
 }
+
+const mergeInfo = ({
+  diagram: _d,
+  mermaid: _m,
+  ...rest
+}: Awaited<ReturnType<typeof writeImported>>) => rest;
 
 export async function importIacFiles(
   ctx: ToolContext,
@@ -634,7 +765,6 @@ export async function importIacFiles(
   },
 ) {
   const out = resolveSafe(ctx, args.output, DIAGRAM_EXTENSIONS);
-  await assertWritable(out, args.output, args.overwrite);
   const files = await collectSources(
     ctx,
     args.source,
@@ -655,8 +785,7 @@ export async function importIacFiles(
       `None of the ${files.length} file(s) looked like Terraform, CloudFormation, Kubernetes, Compose, a cluster config, an Ansible inventory or a Nomad job`,
     );
   if (args.title?.trim()) parsed.title = args.title.trim().replace(/[\r\n]+/g, ' ');
-  const diagram = await autoLayout(parsed, args.direction ?? 'RIGHT');
-  const mermaid = await saveDiagram(out, diagram);
+  const written = await writeImported(out, args.output, parsed, args.direction, args.overwrite);
   return {
     path: display(ctx, out),
     kinds: kinds as IacKind[],
@@ -664,9 +793,10 @@ export async function importIacFiles(
     skipped,
     overridden,
     warnings,
-    nodes: diagram.nodes.length,
-    edges: diagram.edges.length,
-    mermaid,
+    nodes: written.diagram.nodes.length,
+    edges: written.diagram.edges.length,
+    ...mergeInfo(written),
+    mermaid: written.mermaid,
   };
 }
 
@@ -683,25 +813,17 @@ export async function importTerraform(
   },
 ) {
   const out = resolveSafe(ctx, args.output, DIAGRAM_EXTENSIONS);
-  if (!args.overwrite) {
-    const exists = await fs
-      .stat(out)
-      .then(() => true)
-      .catch(() => false);
-    if (exists)
-      throw new ToolError(`"${args.output}" already exists (pass overwrite: true to replace it)`);
-  }
   const files = await collectTerraform(ctx, args.source, args.recursive ?? false);
   const parsed = parseTerraform(files, { includeAll: args.includeAll });
   if (args.title?.trim()) parsed.title = args.title.trim().replace(/[\r\n]+/g, ' ');
-  const diagram = await autoLayout(parsed, args.direction ?? 'RIGHT');
-  const mermaid = await saveDiagram(out, diagram);
+  const written = await writeImported(out, args.output, parsed, args.direction, args.overwrite);
   return {
     path: display(ctx, out),
     files: files.map((f) => f.path),
-    nodes: diagram.nodes.length,
-    edges: diagram.edges.length,
-    mermaid,
+    nodes: written.diagram.nodes.length,
+    edges: written.diagram.edges.length,
+    ...mergeInfo(written),
+    mermaid: written.mermaid,
   };
 }
 
@@ -804,6 +926,7 @@ export async function validate(ctx: ToolContext, args: { path?: string; mermaid?
     errors: parsed.errors,
     nodes: parsed.diagram.nodes.length,
     edges: parsed.diagram.edges.length,
+    issues: lint(parsed.diagram, parsed.kind === 'architecture' ? text : undefined),
     ...(parsed.kind === 'flowchart'
       ? { note: 'Flowcharts are accepted by write_diagram and converted to architecture-beta.' }
       : {}),

@@ -7,6 +7,8 @@ interface Props {
   text: string;
   errors: ParseError[];
   onChange(text: string): void;
+  /** Leaving the editor; the app parses any text still waiting for the typing pause. */
+  onBlur(): void;
   isFlowchart: boolean;
   onConvert(): void;
 }
@@ -16,14 +18,14 @@ const theme = EditorView.theme({
   '.cm-scroller': { fontFamily: 'ui-monospace, SFMono-Regular, Consolas, monospace' },
 });
 
-export function Editor({ text, errors, onChange, isFlowchart, onConvert }: Props) {
+export function Editor({ text, errors, onChange, onBlur, isFlowchart, onConvert }: Props) {
   const { t } = useTranslation();
   const dark =
     typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches;
   return (
     <section className="editor" aria-label="Mermaid">
       {/* Code is always left-to-right, even in RTL UI languages. */}
-      <div className="editor-code" dir="ltr">
+      <div className="editor-code" dir="ltr" onBlur={onBlur}>
         <CodeMirror
           value={text}
           onChange={onChange}

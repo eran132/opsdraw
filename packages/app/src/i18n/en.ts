@@ -49,6 +49,20 @@ const en = {
     invalidId: 'Ids start with a letter and use letters, digits, _ or -.',
     takenId: 'That id is already used.',
     empty: 'Select a node or a connection to edit it.',
+    multiSelected: '{{count}} selected',
+    align: 'Align',
+    alignLeft: 'Align left',
+    alignCenter: 'Align center',
+    alignRight: 'Align right',
+    alignTop: 'Align top',
+    alignMiddle: 'Align middle',
+    alignBottom: 'Align bottom',
+    distribute: 'Distribute',
+    distributeHorizontal: 'Distribute horizontally',
+    distributeVertical: 'Distribute vertically',
+    notSiblings: 'Aligning works on nodes inside the same group. Select nodes that share a parent.',
+    distributeHint: 'Select three or more nodes to distribute them.',
+    nudgeHint: 'Arrow keys move the selection by 8 px; hold Shift for 1 px.',
   },
   editor: {
     errors_one: '{{count}} problem',
@@ -86,6 +100,11 @@ const en = {
     reservedPrefix: '"{{prefix}}" is reserved.',
     icons_one: '{{count}} icon',
     icons_other: '{{count}} icons',
+  },
+  preview: {
+    githubIcons:
+      'GitHub and GitLab draw only the built-in icons (cloud, database, disk, internet, server); other icons show as placeholders there. To share the picture as you see it, commit an exported SVG next to this file.',
+    useBuiltins: 'Use built-in icons where possible',
   },
   status: { saved: 'Saved', terraformImported: 'Imported {{count}} resources' },
 };

@@ -77,6 +77,7 @@ describe('opsdraw MCP server over stdio', () => {
       'auto_layout',
       'import_terraform',
       'import_iac',
+      'describe_format',
       'list_icons',
       'validate',
     ]) {

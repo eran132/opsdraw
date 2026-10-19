@@ -12,7 +12,7 @@ OpsDraw app, commit it, and re-import later without losing the layout.
 ```sh
 opsdraw import <path...> -o <out.mmd> [--recursive] [--include-all] [--direction right|down] [--title T] [--check]
 opsdraw export <in.mmd> -o <out.svg> [--theme light|dark|auto]
-opsdraw validate <file.mmd...>
+opsdraw validate <file.mmd...> [--strict]
 opsdraw --help
 opsdraw --version
 ```
@@ -62,6 +62,20 @@ PNG export is not supported in the CLI yet; use the OpsDraw app.
 
 Parses each file and prints problems as `file:line: message`. Exits 1 if any file has errors,
 2 if a file is missing.
+
+Files that parse are also linted. Issues go to stderr as `file: <severity> [code] message`
+(`file:line: ...` when the issue belongs to one node):
+
+| Code            | Severity | Meaning                                                                        |
+| --------------- | -------- | ------------------------------------------------------------------------------ |
+| `port-conflict` | warning  | More than one edge uses the same side of a node; Mermaid allows one per side.  |
+| `unknown-icon`  | warning  | A built-in or `lucide:` icon that doesn't exist, with up to three suggestions. |
+| `github-icons`  | info     | Icons GitHub/GitLab can't draw (any `prefix:` icon); commit an exported SVG.   |
+| `empty-group`   | info     | A group with nothing inside.                                                   |
+| `isolated-node` | info     | A service with no edges, in a diagram that has at least three edges.           |
+
+Lint issues don't change the exit code. With `--strict`, warnings exit 1 too; info issues never
+fail. Vendor icon prefixes (`aws:`, `azure:`, ...) are not checked.
 
 ## Keep diagrams in sync in CI
 

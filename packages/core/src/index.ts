@@ -32,3 +32,4 @@ export function parseMermaid(source: string): ParseResult & { kind: 'architectur
   return { ...parseArchitecture(source), kind: 'architecture' };
 }
 export * from './merge';
+export * from './lint';

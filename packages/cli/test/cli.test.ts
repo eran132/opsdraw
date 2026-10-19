@@ -254,4 +254,33 @@ describe('opsdraw validate', () => {
     expect(cli('validate', 'exp.mmd').code).toBe(0);
     expect(cli('validate', 'gone.mmd').code).toBe(2);
   });
+
+  it('prints lint issues, and fails on warnings only with --strict', () => {
+    write(
+      'lint.mmd',
+      [
+        'architecture-beta',
+        '  service lb(lucide:servr)[LB]',
+        '  service a(server)[A]',
+        '  service b(server)[B]',
+        '  lb:R --> L:a',
+        '  lb:R --> L:b',
+        '',
+      ].join('\n'),
+    );
+    const r = cli('validate', 'lint.mmd');
+    expect(r.code).toBe(0);
+    expect(r.stdout).toMatch(/lint\.mmd: ok/);
+    expect(r.stderr).toMatch(/^lint\.mmd:2: warning \[port-conflict\] /m);
+    expect(r.stderr).toMatch(
+      /^lint\.mmd:2: warning \[unknown-icon\] .*did you mean lucide:server/m,
+    );
+    expect(r.stderr).toMatch(/^lint\.mmd: info \[github-icons\] .*opsdraw export/m);
+    expect(cli('validate', '--strict', 'lint.mmd').code).toBe(1);
+
+    write('info.mmd', 'architecture-beta\n  group g(cloud)[G]\n  service a(lucide:cpu)[A]\n');
+    const info = cli('validate', '--strict', 'info.mmd');
+    expect(info.code).toBe(0);
+    expect(info.stderr).toMatch(/info \[empty-group\]/);
+  });
 });

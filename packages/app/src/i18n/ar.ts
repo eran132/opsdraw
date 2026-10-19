@@ -51,6 +51,20 @@ const ar: Messages = {
     invalidId: 'تبدأ المعرّفات بحرف وتتكون من أحرف وأرقام و_ أو -.',
     takenId: 'هذا المعرّف مستخدم بالفعل.',
     empty: 'حدّد عقدة أو اتصالاً لتحريره.',
+    multiSelected: 'العناصر المحددة: {{count}}',
+    align: 'محاذاة',
+    alignLeft: 'محاذاة لليسار',
+    alignCenter: 'توسيط أفقي',
+    alignRight: 'محاذاة لليمين',
+    alignTop: 'محاذاة للأعلى',
+    alignMiddle: 'توسيط عمودي',
+    alignBottom: 'محاذاة للأسفل',
+    distribute: 'توزيع',
+    distributeHorizontal: 'توزيع أفقي',
+    distributeVertical: 'توزيع عمودي',
+    notSiblings: 'تعمل المحاذاة على العقد داخل المجموعة نفسها. حدّد عقدًا لها الأصل نفسه.',
+    distributeHint: 'حدّد ثلاث عقد أو أكثر لتوزيعها.',
+    nudgeHint: 'تحرّك مفاتيح الأسهم التحديد بمقدار 8 بكسل، ومع Shift بمقدار بكسل واحد.',
   },
   editor: {
     errors_one: '{{count}} مشكلة',
@@ -88,6 +102,11 @@ const ar: Messages = {
     reservedPrefix: '"{{prefix}}" محجوزة.',
     icons_one: '{{count}} أيقونة',
     icons_other: '{{count}} أيقونات',
+  },
+  preview: {
+    githubIcons:
+      'لا يعرض GitHub وGitLab إلا الأيقونات المضمّنة (cloud وdatabase وdisk وinternet وserver)، وتظهر الأيقونات الأخرى هناك كعناصر نائبة. لمشاركة الرسم كما تراه، أضف ملف SVG مُصدَّرًا بجانب هذا الملف.',
+    useBuiltins: 'استخدام الأيقونات المضمّنة حيثما أمكن',
   },
   status: { saved: 'تم الحفظ', terraformImported: 'تم استيراد {{count}} مورد' },
 };

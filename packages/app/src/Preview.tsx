@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import mermaid from 'mermaid';
+import { useTranslation } from 'react-i18next';
+import type { Diagram } from '@opsdraw/core';
 import { usePacksVersion } from './Icon';
+import { builtinFor, isPrefixedIcon, toBuiltinIcons } from './builtinIcons';
 
 let counter = 0;
 
@@ -21,7 +24,17 @@ export async function renderMermaid(text: string): Promise<string> {
 }
 
 /** Shows what GitHub, GitLab or any Mermaid renderer will draw from this file. */
-export function Preview({ text }: { text: string }) {
+export function Preview({
+  text,
+  diagram,
+  onChange,
+}: {
+  text: string;
+  /** The architecture diagram the text describes, if it is one. */
+  diagram?: Diagram;
+  onChange(d: Diagram): void;
+}) {
+  const { t } = useTranslation();
   const packs = usePacksVersion();
   const [svg, setSvg] = useState('');
   const [error, setError] = useState('');
@@ -42,6 +55,25 @@ export function Preview({ text }: { text: string }) {
     return () => clearTimeout(t);
   }, [text, packs]);
 
+  const packIcons = diagram?.nodes.filter((n) => isPrefixedIcon(n.icon)) ?? [];
+  const mappable = packIcons.filter((n) => builtinFor(n.icon)).length;
+
+  return (
+    <div className="preview-wrap">
+      {diagram && packIcons.length > 0 && (
+        <div className="banner info" role="note" data-testid="github-icons-hint">
+          <span>{t('preview.githubIcons')}</span>
+          <button disabled={!mappable} onClick={() => onChange(toBuiltinIcons(diagram).diagram)}>
+            {t('preview.useBuiltins')}
+          </button>
+        </div>
+      )}
+      <PreviewSvg svg={svg} error={error} />
+    </div>
+  );
+}
+
+function PreviewSvg({ svg, error }: { svg: string; error: string }) {
   return (
     <div className="preview" dir="ltr">
       {error && <pre className="preview-error">{error}</pre>}

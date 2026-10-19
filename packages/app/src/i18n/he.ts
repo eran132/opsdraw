@@ -51,6 +51,20 @@ const he: Messages = {
     invalidId: 'מזהה מתחיל באות ומכיל אותיות, ספרות, _ או -.',
     takenId: 'המזהה הזה כבר בשימוש.',
     empty: 'בחרו צומת או חיבור כדי לערוך אותו.',
+    multiSelected: '{{count}} נבחרו',
+    align: 'יישור',
+    alignLeft: 'יישור לשמאל',
+    alignCenter: 'מירכוז אופקי',
+    alignRight: 'יישור לימין',
+    alignTop: 'יישור למעלה',
+    alignMiddle: 'מירכוז אנכי',
+    alignBottom: 'יישור למטה',
+    distribute: 'פיזור',
+    distributeHorizontal: 'פיזור אופקי',
+    distributeVertical: 'פיזור אנכי',
+    notSiblings: 'יישור פועל על צמתים באותה קבוצה. בחרו צמתים שיש להם אותו הורה.',
+    distributeHint: 'בחרו שלושה צמתים או יותר כדי לפזר אותם.',
+    nudgeHint: 'מקשי החצים מזיזים את הבחירה ב־8 פיקסלים; עם Shift ב־1 פיקסל.',
   },
   editor: {
     errors_one: '{{count}} בעיה',
@@ -88,6 +102,11 @@ const he: Messages = {
     reservedPrefix: '"{{prefix}}" שמור.',
     icons_one: '{{count}} אייקון',
     icons_other: '{{count}} אייקונים',
+  },
+  preview: {
+    githubIcons:
+      'GitHub ו־GitLab מציגים רק את האייקונים המובנים (cloud, database, disk, internet, server); אייקונים אחרים יופיעו שם כמצייני מקום. כדי לשתף את התמונה כפי שאתם רואים אותה, הוסיפו לריפו קובץ SVG מיוצא לצד הקובץ הזה.',
+    useBuiltins: 'שימוש באייקונים מובנים כשאפשר',
   },
   status: { saved: 'נשמר', terraformImported: 'יובאו {{count}} משאבים' },
 };

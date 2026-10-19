@@ -51,6 +51,21 @@ const es: Messages = {
     invalidId: 'Los ids empiezan por una letra y usan letras, dígitos, _ o -.',
     takenId: 'Ese id ya está en uso.',
     empty: 'Selecciona un nodo o una conexión para editarlo.',
+    multiSelected: '{{count}} seleccionados',
+    align: 'Alinear',
+    alignLeft: 'Alinear a la izquierda',
+    alignCenter: 'Centrar horizontalmente',
+    alignRight: 'Alinear a la derecha',
+    alignTop: 'Alinear arriba',
+    alignMiddle: 'Centrar verticalmente',
+    alignBottom: 'Alinear abajo',
+    distribute: 'Distribuir',
+    distributeHorizontal: 'Distribuir horizontalmente',
+    distributeVertical: 'Distribuir verticalmente',
+    notSiblings:
+      'La alineación funciona con nodos del mismo grupo. Selecciona nodos que compartan contenedor.',
+    distributeHint: 'Selecciona tres nodos o más para distribuirlos.',
+    nudgeHint: 'Las flechas mueven la selección 8 px; con Mayús, 1 px.',
   },
   editor: {
     errors_one: '{{count}} problema',
@@ -88,6 +103,11 @@ const es: Messages = {
     reservedPrefix: '"{{prefix}}" está reservado.',
     icons_one: '{{count}} icono',
     icons_other: '{{count}} iconos',
+  },
+  preview: {
+    githubIcons:
+      'GitHub y GitLab solo dibujan los iconos integrados (cloud, database, disk, internet, server); allí los demás iconos aparecen como marcadores de posición. Para compartir el dibujo tal como lo ves, sube un SVG exportado junto a este archivo.',
+    useBuiltins: 'Usar iconos integrados cuando sea posible',
   },
   status: { saved: 'Guardado', terraformImported: 'Se importaron {{count}} recursos' },
 };

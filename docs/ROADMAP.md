@@ -33,12 +33,12 @@ Legend: ✅ done · 🔜 next · 📋 planned
   `<text>` (no `<foreignObject>`, drawio#774), embedded icons, `<title>`/`<desc>`, light/dark/auto
   themes, and the `.mmd` source embedded in SVG `<metadata>` and PNG `tEXt` so exports can be
   reopened. Keep the Mermaid render as "how GitHub will show it".
-- 🔜 **GitHub-safe icons.** GitHub renders `architecture-beta` but only the built-in icons
+- ✅ **GitHub-safe icons.** GitHub renders `architecture-beta` but only the built-in icons
   (community discussion 146647). Warn when a file uses pack icons and offer to (a) commit an
   exported SVG next to it or (b) write built-in fallbacks.
-- 🔜 **Icon validation in MCP.** Reject unknown icon names with nearest-match suggestions
+- ✅ **Icon validation in MCP.** Reject unknown icon names with nearest-match suggestions
   (LLMs hallucinate icon names).
-- 📋 **Port conflicts.** Mermaid allows one edge per node side (mermaid PR #5452). Spread ports in
+- 🔜 **Port conflicts.** (`validate` warns today; automatic port spreading is next.) Mermaid allows one edge per node side (mermaid PR #5452). Spread ports in
   auto-layout, insert junctions for fan-out, and warn in `validate`.
 
 ## Infrastructure as code
@@ -70,9 +70,9 @@ Legend: ✅ done · 🔜 next · 📋 planned
   headline feature).
 - 📋 **Edge routing:** ELK orthogonal routing, saved bend points, line jumps at crossings
   (drawio#5772, Excalidraw#157).
-- 📋 **Large diagrams:** ELK in a Web Worker, render only visible nodes, debounced parsing, and a
+- ✅ **Large diagrams:** ELK in a Web Worker, render only visible nodes, debounced parsing, and a
   500-node benchmark in CI (drawio#3636, Excalidraw#628).
-- 📋 **Alignment tools:** snap guides, align/distribute, fast keyboard nudging.
+- ✅ **Alignment tools:** snap guides, align/distribute, fast keyboard nudging.
 - 📋 **Styling:** `%% @style` comments for group colors (mermaid#6168), auto-generated legend.
 - 📋 **RTL polish:** bidi isolation in exported SVG text; scope `dir` to the app root so it can be
   embedded (Excalidraw#11963).

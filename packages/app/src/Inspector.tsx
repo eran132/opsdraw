@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { descendantsOf, isValidId, removeNode, renameNode, type Diagram } from '@opsdraw/core';
 import type { Selection } from './Canvas';
 import { Icon } from './Icon';
+import { MultiSelection } from './Alignment';
 
 interface Props {
   diagram: Diagram;
@@ -22,6 +23,17 @@ export function Inspector({ diagram, selection, onChange, onSelect, focusLabel }
   useEffect(() => {
     if (focusLabel) labelRef.current?.select();
   }, [focusLabel]);
+
+  if (selection?.type === 'nodes') {
+    return (
+      <MultiSelection
+        diagram={diagram}
+        ids={selection.ids}
+        onChange={onChange}
+        onSelect={onSelect}
+      />
+    );
+  }
 
   if (selection?.type === 'edge') {
     const e = diagram.edges[selection.index];

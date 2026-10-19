@@ -313,3 +313,194 @@ test.describe('vendor icon packs', () => {
     expect(await page.evaluate(() => (window as { __pwned?: number }).__pwned)).toBeUndefined();
   });
 });
+
+/** The whole editor text; CodeMirror only renders the lines in view. */
+const editorDoc = (page: Page) =>
+  page.evaluate(() => {
+    type Doc = { state: { doc: { toString(): string } } };
+    const content = document.querySelector('.cm-content') as
+      (Element & { cmTile?: { root?: { view?: Doc } } }) | null;
+    const view = content?.cmTile?.root?.view;
+    if (view) return view.state.doc.toString();
+    return [...document.querySelectorAll('.cm-line')].map((l) => l.textContent).join('\n');
+  });
+
+const PLACED = `architecture-beta
+  service a(server)[Alpha]
+  service b(database)[Beta]
+  service c(disk)[Gamma]
+  %% @pos a 40 40
+  %% @pos b 240 160
+  %% @pos c 120 320
+`;
+
+async function selectAllThree(page: Page) {
+  await canvasNode(page, 'Alpha').click();
+  await canvasNode(page, 'Beta').click({ modifiers: ['Shift'] });
+  await canvasNode(page, 'Gamma').click({ modifiers: ['Shift'] });
+}
+
+test.describe('arranging nodes', () => {
+  test('shift-click selects several nodes and aligns their left edges', async ({ page }) => {
+    await page.goto('/');
+    await setEditorText(page, PLACED);
+    await expect(page.locator('.react-flow__node')).toHaveCount(3);
+    await selectAllThree(page);
+    const inspector = page.locator('.inspector');
+    await expect(inspector.locator('h2')).toHaveText('3 selected');
+    await expect(page.locator('.react-flow__node.selected')).toHaveCount(3);
+    await inspector.getByRole('button', { name: 'Align left' }).click();
+    await expect.poll(() => editorDoc(page)).toContain('%% @pos b 40 160');
+    const doc = await editorDoc(page);
+    expect(doc).toContain('%% @pos a 40 40');
+    expect(doc).toContain('%% @pos c 40 320');
+  });
+
+  test('shift-drag draws a selection box around several nodes', async ({ page }) => {
+    await page.goto('/');
+    await setEditorText(page, PLACED);
+    await expect(page.locator('.react-flow__node')).toHaveCount(3);
+    const boxes = await Promise.all(
+      ['Alpha', 'Beta', 'Gamma'].map(async (l) => (await canvasNode(page, l).boundingBox())!),
+    );
+    const left = Math.min(...boxes.map((b) => b.x)) - 20;
+    const top = Math.min(...boxes.map((b) => b.y)) - 20;
+    const right = Math.max(...boxes.map((b) => b.x + b.width)) + 20;
+    const bottom = Math.max(...boxes.map((b) => b.y + b.height)) + 20;
+    await page.keyboard.down('Shift');
+    await page.mouse.move(left, top);
+    await page.mouse.down();
+    await page.mouse.move(right, bottom, { steps: 10 });
+    await page.mouse.up();
+    await page.keyboard.up('Shift');
+    await expect(page.locator('.inspector h2')).toHaveText('3 selected');
+  });
+
+  test('distributes three nodes evenly and disables alignment across groups', async ({ page }) => {
+    await page.goto('/');
+    await setEditorText(page, PLACED);
+    await expect(page.locator('.react-flow__node')).toHaveCount(3);
+    await selectAllThree(page);
+    await page.getByRole('button', { name: 'Distribute vertically' }).click();
+    // Alpha (top) and Gamma (bottom) stay; Beta lands so both gaps are equal.
+    await expect.poll(() => editorDoc(page)).not.toContain('%% @pos b 240 160');
+    const doc = await editorDoc(page);
+    expect(doc).toContain('%% @pos a 40 40');
+    expect(doc).toContain('%% @pos c 120 320');
+    // Same-sized boxes: Beta's top lands halfway between Alpha's and Gamma's.
+    expect(doc).toContain('%% @pos b 240 180');
+
+    await setEditorText(page, SIMPLE);
+    await expect(page.locator('.react-flow__node')).toHaveCount(3);
+    await canvasNode(page, 'VPC').locator('.arch-group-title').click();
+    await canvasNode(page, 'Web').click({ modifiers: ['Shift'] });
+    await expect(page.locator('.inspector h2')).toHaveText('2 selected');
+    await expect(page.getByRole('button', { name: 'Align left' })).toBeDisabled();
+    await expect(page.locator('.inspector')).toContainText('same group');
+  });
+
+  test('arrow keys nudge the selection by 8px, Shift by 1px, as one undo step', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await setEditorText(page, PLACED);
+    await expect(page.locator('.react-flow__node')).toHaveCount(3);
+    await canvasNode(page, 'Alpha').click();
+    await page.keyboard.press('ArrowRight');
+    await expect.poll(() => editorDoc(page)).toContain('%% @pos a 48 40');
+    await page.keyboard.press('Shift+ArrowDown');
+    await expect.poll(() => editorDoc(page)).toContain('%% @pos a 48 41');
+
+    // A quick burst is committed once, so a single undo reverts all of it.
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('ArrowUp');
+    await expect.poll(() => editorDoc(page)).toContain('%% @pos a 32 33');
+    await page.keyboard.press('ControlOrMeta+Z');
+    await expect.poll(() => editorDoc(page)).toContain('%% @pos a 48 41');
+
+    // Arrow keys in the editor move the cursor, not the node.
+    await page.locator('.cm-content').click();
+    await page.keyboard.press('ArrowRight');
+    await page.waitForTimeout(600);
+    expect(await editorDoc(page)).toContain('%% @pos a 48 41');
+  });
+});
+
+test.describe('GitHub compatibility', () => {
+  test('warns about pack icons and swaps in built-ins where it can', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('.cm-content')).toContainText('%% @pos api');
+    await page.getByRole('tab', { name: 'Mermaid preview' }).click();
+    const hint = page.getByTestId('github-icons-hint');
+    await expect(hint).toContainText('GitHub and GitLab draw only the built-in icons');
+    await hint.getByRole('button', { name: 'Use built-in icons where possible' }).click();
+    await expect.poll(() => editorDoc(page)).toContain('service cdn(internet)[CDN]');
+    const doc = await editorDoc(page);
+    // Icons with no close built-in are left alone, and positions are kept.
+    expect(doc).toContain('service users(lucide:users)[Users]');
+    expect(doc).toContain('%% @pos api');
+    await expect(hint).toBeVisible();
+
+    await setEditorText(page, SIMPLE);
+    await expect(page.getByTestId('preview-svg').locator('> svg')).toContainText('Orders DB');
+    await expect(hint).toHaveCount(0);
+  });
+});
+
+test.describe('large diagrams', () => {
+  test('a 500-service diagram renders and lays out without freezing the page', async ({ page }) => {
+    test.setTimeout(180_000);
+    const workers: string[] = [];
+    page.on('worker', (w) => workers.push(w.url()));
+    const groups = 25;
+    const perGroup = 20;
+    const total = groups * perGroup;
+    const lines = ['architecture-beta'];
+    for (let g = 0; g < groups; g++) lines.push(`  group g${g}(cloud)[Zone ${g}]`);
+    for (let i = 0; i < total; i++)
+      lines.push(`  service s${i}(server)[Service ${i}] in g${Math.floor(i / perGroup)}`);
+    for (let i = 0; i < total; i++) {
+      if (i % perGroup !== perGroup - 1) lines.push(`  s${i}:R --> L:s${i + 1}`);
+      if (i % perGroup === 0 && i + perGroup < total)
+        lines.push(`  s${i}:B --> T:s${i + perGroup}`);
+    }
+
+    await page.goto('/');
+    await expect(page.locator('.cm-content')).toContainText('%% @pos api');
+    await setEditorText(page, lines.join('\n') + '\n');
+    await expect.poll(() => editorDoc(page)).toContain('service s499(server)[Service 499] in g24');
+    await expect(page.locator('.react-flow__node').first()).toBeVisible();
+    await expect(page.locator('.problems')).toHaveCount(0);
+
+    // A timer that keeps ticking unless the main thread is blocked.
+    await page.evaluate(() => {
+      const w = window as unknown as { __maxGap: number; __last: number };
+      w.__maxGap = 0;
+      w.__last = performance.now();
+      setInterval(() => {
+        const now = performance.now();
+        w.__maxGap = Math.max(w.__maxGap, now - w.__last);
+        w.__last = now;
+      }, 25);
+    });
+    const started = Date.now();
+    await page.getByRole('button', { name: 'Auto layout →' }).click();
+    await expect
+      .poll(() => editorDoc(page), { timeout: 15_000 })
+      .toMatch(/%% @pos s499 -?\d+ -?\d+\n/);
+    const elapsed = Date.now() - started;
+    const maxGap = await page.evaluate(() => (window as unknown as { __maxGap: number }).__maxGap);
+    console.log(
+      `500 services: layout ${elapsed} ms, longest main-thread stall ${Math.round(maxGap)} ms`,
+    );
+    expect(elapsed).toBeLessThan(15_000);
+    // Drawing the result takes a moment, but the layout itself must not block the page.
+    expect(maxGap).toBeLessThan(5_000);
+    expect(workers.some((u) => u.includes('layout.worker'))).toBe(true);
+
+    // Only what is in view is drawn once the diagram is this big.
+    await expect(page.locator('.react-flow__node').first()).toBeVisible();
+    expect(await page.locator('.react-flow__node').count()).toBeLessThan(total + groups);
+  });
+});

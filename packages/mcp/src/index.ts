@@ -17,6 +17,12 @@ Icons are Mermaid built-ins (cloud, database, disk, internet, server) or "prefix
 const LAYOUT_NOTE =
   'Layout: with layout=true (default), the whole diagram is auto-laid out with ELK only if some node has no stored position, which replaces existing positions. Pass layout=false to keep hand-placed positions (the new node is written unplaced; call auto_layout later).';
 
+const ICON_NOTE =
+  'Unknown icons are rejected with suggestions: bare names must be Mermaid built-ins, lucide:<name> must exist; other prefixes (aws:, azure:...) are accepted as user-imported packs.';
+
+const MERGE_NOTE =
+  'If output exists, it is merged: positions and edge sides of surviving nodes are kept, only new nodes are laid out, and added/removed/changed ids are returned. overwrite: true replaces it with a fresh layout.';
+
 const PATHS_NOTE = `Paths are relative to the server root (OPSDRAW_ROOT or the working directory) and cannot leave it.`;
 
 const ctx = tools.contextFromEnv();
@@ -54,13 +60,27 @@ const run =
     }
   };
 
-const server = new McpServer({ name: 'opsdraw', version: pkg.version });
+// The format text lives in the server instructions and describe_format rather than in every tool
+// description: very long descriptions stop some MCP clients from listing the tools at all.
+const server = new McpServer({ name: 'opsdraw', version: pkg.version }, { instructions: FORMAT });
+
+server.registerTool(
+  'describe_format',
+  {
+    title: 'Describe the diagram format',
+    description:
+      'Explain the opsdraw diagram file format (Mermaid architecture-beta plus %% @pos layout lines). Call this before writing diagram text by hand.',
+    inputSchema: {},
+    annotations: { readOnlyHint: true },
+  },
+  async () => ({ content: [{ type: 'text', text: FORMAT }] }),
+);
 
 server.registerTool(
   'create_diagram',
   {
     title: 'Create diagram',
-    description: `Create a new, empty architecture diagram file (parent directories are created). Fails if the file exists unless overwrite is true. ${PATHS_NOTE}\n\n${FORMAT}`,
+    description: `Create a new, empty architecture diagram file (parent directories are created). Fails if the file exists unless overwrite is true. ${PATHS_NOTE} File format: call describe_format.`,
     inputSchema: {
       path: pathArg,
       title: z.string().optional().describe('Diagram title (written as YAML front matter)'),
@@ -85,7 +105,7 @@ server.registerTool(
   'write_diagram',
   {
     title: 'Write diagram',
-    description: `Replace a diagram file with the given Mermaid text. Accepts "architecture-beta" or a flowchart ("flowchart"/"graph"), which is converted to architecture-beta (subgraphs become groups). If the text has errors, nothing is written and the errors (with line numbers) are returned. ${LAYOUT_NOTE} ${PATHS_NOTE}\n\n${FORMAT}`,
+    description: `Replace a diagram file with the given Mermaid text. Accepts "architecture-beta" or a flowchart ("flowchart"/"graph"), which is converted to architecture-beta (subgraphs become groups). If the text has errors, nothing is written and the errors (with line numbers) are returned. ${LAYOUT_NOTE} ${PATHS_NOTE} File format: call describe_format.`,
     inputSchema: {
       path: pathArg,
       mermaid: z.string().describe('Full Mermaid source'),
@@ -112,7 +132,7 @@ server.registerTool(
   'add_service',
   {
     title: 'Add service',
-    description: `Add a service (a box with an icon and label) to a diagram, optionally inside a group. Returns the new id. ${LAYOUT_NOTE}`,
+    description: `Add a service (a box with an icon and label) to a diagram, optionally inside a group. Returns the new id. ${ICON_NOTE} ${LAYOUT_NOTE}`,
     inputSchema: nodeInputs,
   },
   run((a) => tools.addService(ctx, a)),
@@ -122,7 +142,7 @@ server.registerTool(
   'add_group',
   {
     title: 'Add group',
-    description: `Add a group (a container such as a VPC, subnet, cluster or bounded context), optionally nested in another group. Returns the new id. ${LAYOUT_NOTE}`,
+    description: `Add a group (a container such as a VPC, subnet, cluster or bounded context), optionally nested in another group. Returns the new id. ${ICON_NOTE} ${LAYOUT_NOTE}`,
     inputSchema: nodeInputs,
   },
   run((a) => tools.addGroup(ctx, a)),
@@ -181,7 +201,7 @@ server.registerTool(
   'update_node',
   {
     title: 'Update node',
-    description: `Change a node's label, icon, parent group or id. Renaming (newId) updates every edge and child reference. parent: null moves it to the top level; moving a node drops its position, and with layout=true (default) the diagram is re-laid out. icon: null removes the icon.`,
+    description: `Change a node's label, icon, parent group or id. Renaming (newId) updates every edge and child reference. parent: null moves it to the top level; moving a node drops its position, and with layout=true (default) the diagram is re-laid out. icon: null removes the icon. ${ICON_NOTE}`,
     inputSchema: {
       path: pathArg,
       id: idArg,
@@ -221,7 +241,7 @@ server.registerTool(
   'import_terraform',
   {
     title: 'Import Terraform',
-    description: `Build an architecture diagram from Terraform: reads a .tf file, or the .tf files in a directory (non-recursive unless recursive: true; hidden dirs and symlinks are skipped). Resources and modules become services, networks (VPC/VNet/subnet/resource group) become nested groups, references become edges, and plumbing resources (IAM policies, attachments, rules...) are hidden unless includeAll is true. HCL is not evaluated. The result is auto-laid out and written to output. ${PATHS_NOTE}`,
+    description: `Build an architecture diagram from Terraform: reads a .tf file, or the .tf files in a directory (non-recursive unless recursive: true; hidden dirs and symlinks are skipped). Resources and modules become services, networks (VPC/VNet/subnet/resource group) become nested groups, references become edges, and plumbing resources (IAM policies, attachments, rules...) are hidden unless includeAll is true. HCL is not evaluated. ${MERGE_NOTE} ${PATHS_NOTE}`,
     inputSchema: {
       source: z.string().describe('A .tf file or a directory containing .tf files'),
       output: z.string().describe('Diagram file to write (.mmd or .mermaid)'),
@@ -229,7 +249,10 @@ server.registerTool(
       includeAll: z.boolean().optional().describe('Keep plumbing resources (default false)'),
       direction: directionArg,
       title: z.string().optional(),
-      overwrite: z.boolean().optional().describe('Replace an existing output file (default false)'),
+      overwrite: z
+        .boolean()
+        .optional()
+        .describe('Replace instead of merging into an existing output (default false)'),
     },
   },
   run((a) => tools.importTerraform(ctx, a)),
@@ -239,7 +262,7 @@ server.registerTool(
   'import_iac',
   {
     title: 'Import infrastructure as code',
-    description: `Build an architecture diagram from infrastructure code. Detects each file's format: Terraform (.tf; clouds plus Proxmox, VergeOS, vSphere, Xen Orchestra, Nutanix, OpenStack, libvirt, LXD/Incus, Harvester, Hyper-V, VirtualBox and Rancher, with hosts, clusters and networks as nested groups), CloudFormation (YAML/JSON, short-form tags), Kubernetes manifests (incl. OpenShift Routes, KubeVirt VMs, Gateway API, Helm/Flux/Argo apps; save \`helm template\` or \`kustomize build\` output to a file), cluster configs (k0sctl, Talos, k3s/RKE2), Docker Compose, Ansible inventories (INI or YAML, incl. extension-less hosts/inventory files) and Nomad jobs. Reads one file or a directory (non-recursive unless recursive: true). Unrecognized files are reported as skipped. Mixed formats are merged with per-format id prefixes. The result is auto-laid out and written to output. ${PATHS_NOTE}`,
+    description: `Build a diagram from infrastructure code, detecting each file's format: Terraform (.tf; clouds and virtualization providers such as Proxmox, vSphere, OpenStack, libvirt; hosts, clusters and networks become nested groups), CloudFormation, Kubernetes manifests (incl. OpenShift, KubeVirt, Gateway API, Helm/Flux/Argo apps; render charts to a file first), cluster configs (k0sctl, Talos, k3s/RKE2), Docker Compose, Ansible inventories (incl. extension-less hosts files) and Nomad jobs. Reads a file or directory; unrecognized files are reported as skipped; mixed formats get id prefixes. ${MERGE_NOTE} ${PATHS_NOTE}`,
     inputSchema: {
       source: z.string().describe('A file or a directory of infrastructure code'),
       output: z.string().describe('Diagram file to write (.mmd or .mermaid)'),
@@ -250,7 +273,10 @@ server.registerTool(
         .describe('Keep plumbing resources: IAM, attachments, ConfigMaps... (default false)'),
       direction: directionArg,
       title: z.string().optional(),
-      overwrite: z.boolean().optional().describe('Replace an existing output file (default false)'),
+      overwrite: z
+        .boolean()
+        .optional()
+        .describe('Replace instead of merging into an existing output (default false)'),
     },
   },
   run((a) => tools.importIacFiles(ctx, a)),
@@ -275,7 +301,7 @@ server.registerTool(
   'validate',
   {
     title: 'Validate',
-    description: `Check Mermaid text, or a diagram file, without changing anything. Pass exactly one of path or mermaid. Returns the detected kind (architecture or flowchart) and errors with line numbers.\n\n${FORMAT}`,
+    description: `Check Mermaid text, or a diagram file, without changing anything. Pass exactly one of path or mermaid. Returns the detected kind (architecture or flowchart), parse errors with line numbers, and lint issues ({severity, code, message, nodeId?, line?}): edges sharing a node side (port-conflict), unknown icons with suggestions, icons GitHub can't draw, empty groups, unconnected services. The file format is described in write_diagram.`,
     inputSchema: {
       path: z.string().optional().describe('Diagram file to check'),
       mermaid: z.string().optional().describe('Mermaid text to check'),

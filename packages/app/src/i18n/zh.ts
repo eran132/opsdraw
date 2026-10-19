@@ -51,6 +51,20 @@ const zh: Messages = {
     invalidId: 'ID 须以字母开头，只能包含字母、数字、_ 或 -。',
     takenId: '该 ID 已被使用。',
     empty: '选择一个节点或连接进行编辑。',
+    multiSelected: '已选择 {{count}} 项',
+    align: '对齐',
+    alignLeft: '左对齐',
+    alignCenter: '水平居中',
+    alignRight: '右对齐',
+    alignTop: '顶端对齐',
+    alignMiddle: '垂直居中',
+    alignBottom: '底端对齐',
+    distribute: '分布',
+    distributeHorizontal: '水平等距分布',
+    distributeVertical: '垂直等距分布',
+    notSiblings: '对齐只适用于同一分组内的节点。请选择父级相同的节点。',
+    distributeHint: '选择三个或更多节点才能等距分布。',
+    nudgeHint: '方向键将所选内容移动 8 px；按住 Shift 时移动 1 px。',
   },
   editor: {
     errors_one: '{{count}} 个问题',
@@ -88,6 +102,11 @@ const zh: Messages = {
     reservedPrefix: '“{{prefix}}”为保留前缀。',
     icons_one: '{{count}} 个图标',
     icons_other: '{{count}} 个图标',
+  },
+  preview: {
+    githubIcons:
+      'GitHub 和 GitLab 只能显示内置图标（cloud、database、disk、internet、server），其他图标会显示为占位符。若要按你看到的样子分享图表，请将导出的 SVG 提交到此文件旁边。',
+    useBuiltins: '尽可能使用内置图标',
   },
   status: { saved: '已保存', terraformImported: '已导入 {{count}} 个资源' },
 };

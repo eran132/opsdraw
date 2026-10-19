@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ReactFlowProvider } from '@xyflow/react';
 import {
-  autoLayout,
   emptyDiagram,
   importIac,
   parseMermaid,
@@ -18,6 +17,7 @@ import { Inspector } from './Inspector';
 import { Palette } from './Palette';
 import { Preview } from './Preview';
 import { resolveIcon } from './icons';
+import { layoutDiagram } from './layout';
 import { PackDialog } from './PackDialog';
 import { LANGUAGES } from './i18n';
 import {
@@ -33,6 +33,9 @@ import {
 import { SAMPLE } from './sample';
 
 type Handle = OpenedFile['handle'];
+
+/** Pause in typing before the canvas re-parses the text. */
+const PARSE_DEBOUNCE_MS = 150;
 
 export function App() {
   const { t, i18n } = useTranslation();
@@ -57,16 +60,58 @@ export function App() {
   textRef.current = text;
   const dirty = text !== savedText;
 
-  /** Text is the source of truth; the canvas follows the last version that parsed cleanly. */
-  const setText = useCallback((next: string) => {
-    setTextState(next);
+  const parseTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  /** Typed text the canvas has not caught up with yet. */
+  const unparsed = useRef<string | null>(null);
+
+  /**
+   * Text is the source of truth; the canvas follows the last version that parsed cleanly.
+   * Returns that diagram when the text is a valid architecture diagram.
+   */
+  const parseNow = useCallback((next: string): Diagram | undefined => {
+    clearTimeout(parseTimer.current);
+    unparsed.current = null;
     const result = parseMermaid(next);
     setIsFlowchart(result.kind === 'flowchart');
     setErrors(result.errors);
-    if (result.kind === 'architecture' && result.errors.length === 0) setDiagram(result.diagram);
+    if (result.kind !== 'architecture' || result.errors.length) return undefined;
+    setDiagram(result.diagram);
+    return result.diagram;
   }, []);
 
+  const setText = useCallback(
+    (next: string) => {
+      setTextState(next);
+      textRef.current = next;
+      parseNow(next);
+    },
+    [parseNow],
+  );
+
+  /** Catches the canvas up with typing that is still waiting for the debounce. */
+  const flushParse = useCallback(
+    () => (unparsed.current === null ? undefined : parseNow(unparsed.current)),
+    [parseNow],
+  );
+
+  /** Typing updates the text at once and re-parses after a short pause, so big files stay fast. */
+  const onType = useCallback(
+    (next: string) => {
+      setTextState(next);
+      textRef.current = next;
+      unparsed.current = next;
+      clearTimeout(parseTimer.current);
+      parseTimer.current = setTimeout(() => parseNow(next), PARSE_DEBOUNCE_MS);
+    },
+    [parseNow],
+  );
+
+  useEffect(() => () => clearTimeout(parseTimer.current), []);
+
   const applyDiagram = useCallback((d: Diagram) => {
+    // The diagram's text replaces whatever was typed, so a pending parse is moot.
+    clearTimeout(parseTimer.current);
+    unparsed.current = null;
     undo.current.push(textRef.current);
     redo.current = [];
     setDiagram(d);
@@ -83,7 +128,7 @@ export function App() {
       const unplaced =
         result.diagram.nodes.length > 0 && !Object.keys(result.diagram.layout).length;
       if (result.kind === 'architecture' && result.errors.length === 0 && unplaced) {
-        applyDiagram(await autoLayout(result.diagram));
+        applyDiagram(await layoutDiagram(result.diagram));
       }
       setSelection(null);
       if (opts.fit !== false) setFitKey((k) => k + 1);
@@ -93,7 +138,9 @@ export function App() {
 
   // The bundled sample has no positions; lay it out once on start.
   useEffect(() => {
-    void autoLayout(parseMermaid(SAMPLE).diagram).then((d) => {
+    void layoutDiagram(parseMermaid(SAMPLE).diagram).then((d) => {
+      // The layout runs off the main thread; don't overwrite anything typed or opened meanwhile.
+      if (textRef.current !== SAMPLE) return;
       const laid = serializeArchitecture(d);
       setSavedText(laid);
       setText(laid);
@@ -158,12 +205,14 @@ export function App() {
   }
 
   async function doSave(as = false) {
-    const res = await saveFile(text, fileName, as ? undefined : handle.current);
+    flushParse();
+    const current = textRef.current;
+    const res = await saveFile(current, fileName, as ? undefined : handle.current);
     if (!res) return;
     handle.current = res.handle;
     lastModified.current = res.lastModified;
     setFileName(res.name);
-    setSavedText(text);
+    setSavedText(current);
     setStatus(t('status.saved'));
   }
 
@@ -185,7 +234,7 @@ export function App() {
       files.map(async (f) => ({ path: f.name, content: await f.text() })),
     );
     const { diagram: imported } = importIac(contents);
-    const laid = await autoLayout(imported);
+    const laid = await layoutDiagram(imported);
     applyDiagram(laid);
     setSelection(null);
     setFitKey((k) => k + 1);
@@ -193,14 +242,15 @@ export function App() {
   }
 
   async function doLayout(direction: LayoutDirection) {
-    applyDiagram(await autoLayout(diagram, direction));
+    const current = flushParse() ?? diagram;
+    applyDiagram(await layoutDiagram(current, direction));
     setFitKey((k) => k + 1);
   }
 
   async function doConvert() {
-    const result = parseMermaid(text);
+    const result = parseMermaid(textRef.current);
     if (result.errors.length) return;
-    applyDiagram(await autoLayout(result.diagram));
+    applyDiagram(await layoutDiagram(result.diagram));
     setFitKey((k) => k + 1);
   }
 
@@ -211,9 +261,10 @@ export function App() {
   async function doExport(kind: 'svg' | 'png') {
     const base = fileName.replace(/\.(mmd|mermaid|md)$/i, '');
     const theme = kind === 'svg' ? 'auto' : 'light';
-    const svg = renderDiagramSvg(diagram, { resolveIcon, theme });
+    const current = flushParse() ?? diagram;
+    const svg = renderDiagramSvg(current, { resolveIcon, theme });
     if (kind === 'svg') download(new Blob([svg], { type: 'image/svg+xml' }), `${base}.svg`);
-    else download(await svgToPngWithSource(svg, serializeArchitecture(diagram)), `${base}.png`);
+    else download(await svgToPngWithSource(svg, serializeArchitecture(current)), `${base}.png`);
   }
 
   const pickIcon = (icon: string) => {
@@ -305,34 +356,40 @@ export function App() {
         </div>
       )}
 
-      <main className="workspace">
-        <Palette onPick={pickIcon} />
-        <Editor
-          text={text}
-          errors={errors}
-          onChange={setText}
-          isFlowchart={isFlowchart}
-          onConvert={() => void doConvert()}
-        />
-        <section className="stage">
-          <div className="tabs" role="tablist">
-            <button role="tab" aria-selected={view === 'canvas'} onClick={() => setView('canvas')}>
-              {t('view.canvas')}
-            </button>
-            <button
-              role="tab"
-              aria-selected={view === 'preview'}
-              onClick={() => setView('preview')}
-            >
-              {t('view.preview')}
-            </button>
-            <span className="file-name" dir="auto">
-              {fileName}
-              {dirty && <span className="muted"> • {t('file.unsaved')}</span>}
-            </span>
-          </div>
-          {view === 'canvas' ? (
-            <ReactFlowProvider>
+      {/* One React Flow store for the canvas and the inspector (which measures nodes to align them). */}
+      <ReactFlowProvider>
+        <main className="workspace">
+          <Palette onPick={pickIcon} />
+          <Editor
+            text={text}
+            errors={errors}
+            onChange={onType}
+            onBlur={flushParse}
+            isFlowchart={isFlowchart}
+            onConvert={() => void doConvert()}
+          />
+          <section className="stage">
+            <div className="tabs" role="tablist">
+              <button
+                role="tab"
+                aria-selected={view === 'canvas'}
+                onClick={() => setView('canvas')}
+              >
+                {t('view.canvas')}
+              </button>
+              <button
+                role="tab"
+                aria-selected={view === 'preview'}
+                onClick={() => setView('preview')}
+              >
+                {t('view.preview')}
+              </button>
+              <span className="file-name" dir="auto">
+                {fileName}
+                {dirty && <span className="muted"> • {t('file.unsaved')}</span>}
+              </span>
+            </div>
+            {view === 'canvas' ? (
               <Canvas
                 diagram={diagram}
                 onChange={applyDiagram}
@@ -341,19 +398,23 @@ export function App() {
                 fitKey={fitKey}
                 onEditLabel={() => setFocusLabel((n) => n + 1)}
               />
-            </ReactFlowProvider>
-          ) : (
-            <Preview text={text} />
-          )}
-        </section>
-        <Inspector
-          diagram={diagram}
-          selection={selection}
-          onChange={applyDiagram}
-          onSelect={setSelection}
-          focusLabel={focusLabel}
-        />
-      </main>
+            ) : (
+              <Preview
+                text={text}
+                diagram={isFlowchart ? undefined : diagram}
+                onChange={applyDiagram}
+              />
+            )}
+          </section>
+          <Inspector
+            diagram={diagram}
+            selection={selection}
+            onChange={applyDiagram}
+            onSelect={setSelection}
+            focusLabel={focusLabel}
+          />
+        </main>
+      </ReactFlowProvider>
       <footer className="statusbar">
         <span role="status">{status}</span>
         <span className="muted small">
