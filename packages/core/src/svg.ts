@@ -1,4 +1,4 @@
-import type { ArchNode, Diagram, Side } from './model';
+import type { ArchNode, Diagram, Point, Rect, Side } from './model';
 import { GROUP_PADDING, JUNCTION_SIZE, SERVICE_SIZE } from './layout';
 import { serializeArchitecture } from './mermaid';
 
@@ -25,13 +25,6 @@ export interface SvgOptions {
   /** Embed the Mermaid source in <metadata> (default true). */
   embedSource?: boolean;
   padding?: number;
-}
-
-interface Rect {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
 }
 
 export const SOURCE_METADATA_ID = 'opsdraw-source';
@@ -135,7 +128,8 @@ export function absoluteRects(diagram: Diagram): Map<string, Rect> {
   return abs;
 }
 
-function anchor(r: Rect, side: Side) {
+/** Where an edge attaches to a side of a rectangle (its middle), and the outward direction. */
+export function anchor(r: Rect, side: Side) {
   switch (side) {
     case 'T':
       return { x: r.x + r.w / 2, y: r.y, dx: 0, dy: -1 };
@@ -148,10 +142,68 @@ function anchor(r: Rect, side: Side) {
   }
 }
 
-/** An orthogonal path leaving and entering perpendicular to the chosen sides. */
-function edgePath(a: Rect, as: Side, b: Rect, bs: Side) {
+const horizontal = (s: Side) => s === 'L' || s === 'R';
+
+/**
+ * The points of a stored route: from `start` (on side `startSide`) through the bend points to
+ * `end`. Where two consecutive points are not on a line (the ends moved a little, or the bend
+ * points were rounded), an elbow is added so every segment stays horizontal or vertical, leaving
+ * and entering perpendicular to the sides.
+ */
+export function routePoints(
+  start: Point,
+  startSide: Side,
+  bends: readonly Point[],
+  end: Point,
+  endSide: Side,
+): Point[] {
+  const pts: Point[] = [{ x: start.x, y: start.y }];
+  // Whether the segment arriving at the last point was horizontal.
+  let wasHorizontal = !horizontal(startSide);
+  const to = (next: Point, horizontalFirst: boolean) => {
+    const cur = pts[pts.length - 1]!;
+    const dx = Math.abs(next.x - cur.x);
+    const dy = Math.abs(next.y - cur.y);
+    if (dx < 0.5 && dy < 0.5) return;
+    if (dx >= 0.5 && dy >= 0.5) {
+      pts.push(horizontalFirst ? { x: next.x, y: cur.y } : { x: cur.x, y: next.y });
+      wasHorizontal = !horizontalFirst;
+    } else {
+      wasHorizontal = dy < 0.5;
+    }
+    pts.push({ x: next.x, y: next.y });
+  };
+  bends.forEach((b, i) => to(b, i === 0 ? horizontal(startSide) : !wasHorizontal));
+  to(end, !horizontal(endSide));
+  // Drop the middle points of straight runs.
+  return pts.filter((p, i) => {
+    const a = pts[i - 1];
+    const b = pts[i + 1];
+    if (!a || !b) return true;
+    return !((a.x === p.x && p.x === b.x) || (a.y === p.y && p.y === b.y));
+  });
+}
+
+/** SVG path data for a polyline, and the middle of its longest segment (for a label). */
+export function polylinePath(pts: readonly Point[]) {
+  const d = pts.map((pt, i) => `${i ? 'L' : 'M'}${round(pt.x)} ${round(pt.y)}`).join(' ');
+  let best = { len: -1, x: 0, y: 0 };
+  for (let i = 1; i < pts.length; i++) {
+    const len = Math.hypot(pts[i]!.x - pts[i - 1]!.x, pts[i]!.y - pts[i - 1]!.y);
+    if (len > best.len)
+      best = { len, x: (pts[i]!.x + pts[i - 1]!.x) / 2, y: (pts[i]!.y + pts[i - 1]!.y) / 2 };
+  }
+  return { d, labelAt: best };
+}
+
+/**
+ * The drawn path of an edge: its stored route when it has one, otherwise an orthogonal elbow
+ * leaving and entering perpendicular to the chosen sides.
+ */
+function edgePath(a: Rect, as: Side, b: Rect, bs: Side, route?: readonly Point[]) {
   const p = anchor(a, as);
   const q = anchor(b, bs);
+  if (route?.length) return polylinePath(routePoints(p, as, route, q, bs));
   const gap = 16;
   const p2 = { x: p.x + p.dx * gap, y: p.y + p.dy * gap };
   const q2 = { x: q.x + q.dx * gap, y: q.y + q.dy * gap };
@@ -168,15 +220,7 @@ function edgePath(a: Rect, as: Side, b: Rect, bs: Side) {
     pts.push({ x: p2.x, y: q2.y });
   }
   pts.push(q2, { x: q.x, y: q.y });
-  const d = pts.map((pt, i) => `${i ? 'L' : 'M'}${round(pt.x)} ${round(pt.y)}`).join(' ');
-  // Label at the middle of the longest segment.
-  let best = { len: -1, x: 0, y: 0 };
-  for (let i = 1; i < pts.length; i++) {
-    const len = Math.hypot(pts[i]!.x - pts[i - 1]!.x, pts[i]!.y - pts[i - 1]!.y);
-    if (len > best.len)
-      best = { len, x: (pts[i]!.x + pts[i - 1]!.x) / 2, y: (pts[i]!.y + pts[i - 1]!.y) / 2 };
-  }
-  return { d, labelAt: best };
+  return polylinePath(pts);
 }
 
 const round = (v: number) => Math.round(v * 10) / 10;
@@ -213,6 +257,16 @@ export function renderDiagramSvg(diagram: Diagram, options: SvgOptions = {}): st
     minY = Math.min(minY, r.y);
     maxX = Math.max(maxX, r.x + r.w);
     maxY = Math.max(maxY, r.y + r.h);
+  }
+  // Routes can go around nodes, outside their bounding box.
+  for (const e of diagram.edges) {
+    if (!e.route || !rects.has(e.from) || !rects.has(e.to)) continue;
+    for (const p of e.route) {
+      minX = Math.min(minX, p.x);
+      minY = Math.min(minY, p.y);
+      maxX = Math.max(maxX, p.x);
+      maxY = Math.max(maxY, p.y);
+    }
   }
   if (!rects.size) [minX, minY, maxX, maxY] = [0, 0, 200, 100];
   // Leave room for labels below services.
@@ -278,7 +332,7 @@ export function renderDiagramSvg(diagram: Diagram, options: SvgOptions = {}): st
     const a = rects.get(e.from);
     const b = rects.get(e.to);
     if (!a || !b) continue;
-    const { d, labelAt } = edgePath(a, e.fromSide, b, e.toSide);
+    const { d, labelAt } = edgePath(a, e.fromSide, b, e.toSide, e.route);
     const markers =
       (e.arrowEnd ? ' marker-end="url(#opsdraw-arrow)"' : '') +
       (e.arrowStart ? ' marker-start="url(#opsdraw-arrow)"' : '');

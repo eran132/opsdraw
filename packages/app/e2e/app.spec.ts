@@ -504,3 +504,44 @@ test.describe('large diagrams', () => {
     expect(await page.locator('.react-flow__node').count()).toBeLessThan(total + groups);
   });
 });
+
+test.describe('edge routes', () => {
+  test('auto-layout stores routes, the canvas draws them, and moving a node drops its routes', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await expect.poll(() => editorDoc(page)).toMatch(/%% @route \w+ \w+ /);
+    const doc = await editorDoc(page);
+    const routes = [...doc.matchAll(/%% @route (\w+) (\w+) ((?:-?\d+,-?\d+ ?)+)/g)].map((m) => ({
+      from: m[1]!,
+      to: m[2]!,
+      first: m[3]!.split(' ')[0]!.replace(',', ' '),
+    }));
+    expect(routes.length).toBeGreaterThan(0);
+
+    // Routed edges use the custom edge, drawn through the stored bend points.
+    const routed = page.locator('.react-flow__edge-routed');
+    await expect(routed).toHaveCount(routes.length);
+    const paths = await routed
+      .locator('path.react-flow__edge-path')
+      .evaluateAll((ps) => ps.map((p) => p.getAttribute('d') ?? ''));
+    for (const r of routes) expect(paths.some((d) => d.includes(`L${r.first}`))).toBe(true);
+
+    // Moving one end of a routed edge drops that edge's route, and only routes touching it.
+    const moved = routes[0]!.from;
+    const node = page.locator(`.react-flow__node[data-id="${moved}"]`);
+    const box = (await node.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + 10);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2, box.y + 34, { steps: 6 });
+    await page.mouse.up();
+    const stale = routes.filter((r) => r.from === moved || r.to === moved);
+    for (const r of stale)
+      await expect.poll(() => editorDoc(page)).not.toContain(`%% @route ${r.from} ${r.to} `);
+    const after = await editorDoc(page);
+    expect(after).toMatch(new RegExp(`%% @pos ${moved} `));
+    for (const r of routes.filter((x) => !stale.includes(x)))
+      expect(after).toContain(`%% @route ${r.from} ${r.to} `);
+    await expect(routed).toHaveCount(routes.length - stale.length);
+  });
+});

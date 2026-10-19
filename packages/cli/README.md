@@ -4,8 +4,9 @@ Command line for OpsDraw: turn infrastructure-as-code into a Mermaid `architectu
 diagram, keep that diagram in sync in CI, and export it to SVG.
 
 Diagrams are plain `.mmd` files that render on GitHub and GitLab as-is. Canvas positions live in
-`%% @pos <id> x y [w h]` comment lines that Mermaid ignores, so you can arrange a diagram in the
-OpsDraw app, commit it, and re-import later without losing the layout.
+`%% @pos <id> x y [w h]` comment lines (and edge routes in `%% @route <from> <to> x,y ...` lines)
+that Mermaid ignores, so you can arrange a diagram in the OpsDraw app, commit it, and re-import
+later without losing the layout.
 
 ## Commands
 
@@ -13,6 +14,9 @@ OpsDraw app, commit it, and re-import later without losing the layout.
 opsdraw import <path...> -o <out.mmd> [--recursive] [--include-all] [--direction right|down] [--title T] [--check]
 opsdraw export <in.mmd> -o <out.svg> [--theme light|dark|auto]
 opsdraw validate <file.mmd...> [--strict]
+opsdraw diff <old.mmd> <new.mmd>
+opsdraw merge-driver <base> <ours> <theirs> [<path>]
+opsdraw git-setup [--apply] [--driver auto|npx|local]
 opsdraw --help
 opsdraw --version
 ```
@@ -76,6 +80,88 @@ Files that parse are also linted. Issues go to stderr as `file: <severity> [code
 
 Lint issues don't change the exit code. With `--strict`, warnings exit 1 too; info issues never
 fail. Vendor icon prefixes (`aws:`, `azure:`, ...) are not checked.
+
+### diff
+
+Prints the structural differences between two diagram files: added, removed and changed nodes
+and edges (with the fields that changed) and title changes. Layout is summarized as a count of
+moved and resized nodes. Exits 0 whether or not there are differences, 1 if a file does not
+parse, 2 on usage errors or a missing file.
+
+```text
+$ opsdraw diff old.mmd new.mmd
+old.mmd -> new.mmd
+1 added, 0 removed, 1 changed nodes; 1 added, 0 removed, 0 changed edges
+  + service y [Y]
+  ~ x (label: "X" -> "X2")
+  + edge y->z
+Layout: 1 moved, 0 resized nodes
+```
+
+## Git merge driver
+
+Two branches that each move a few nodes, or move one node and rename another, usually touch
+neighbouring lines of an `.mmd` file, so git's line-based merge reports a conflict. The OpsDraw
+merge driver merges the diagrams instead:
+
+- nodes and edges added on either branch are kept;
+- a deletion wins, unless the other branch changed that node or edge (then it is kept, as a
+  conflict); a deleted group or node comes back if the other branch put a node in it or
+  connected an edge to it;
+- edits to different fields of the same node (label on one side, icon on the other) combine;
+  the same field changed differently on both sides is a conflict, and your side (ours) is kept;
+- layout never conflicts: each node keeps the position of the branch that moved it (ours if
+  both did); position and group size merge separately; edge sides and routes count as layout;
+- comments added on either side are kept, and the title merges like a field.
+
+### Setup
+
+Run once per clone, inside the repository:
+
+```sh
+opsdraw git-setup          # print the commands
+opsdraw git-setup --apply  # run them (safe to repeat)
+```
+
+which amounts to:
+
+```sh
+git config merge.opsdraw.name "OpsDraw diagram merge"
+git config merge.opsdraw.driver "npx --yes opsdraw merge-driver %O %A %B %P"
+echo '*.mmd merge=opsdraw' >> .gitattributes
+echo '*.mermaid merge=opsdraw' >> .gitattributes
+```
+
+When the CLI runs from a checkout of this repository rather than from npm (the CLI is not
+published yet), `--driver auto` (the default) writes a driver that calls that build directly,
+for example `node "/path/to/opsdraw/packages/cli/dist/index.js" merge-driver %O %A %B %P`.
+Force either form with `--driver npx` or `--driver local`.
+
+The driver config lives in `.git/config`, so every clone runs the setup once; commit
+`.gitattributes` so the attribute is shared. Without the driver config git falls back to its
+normal merge for these files.
+
+### How conflicts look
+
+The driver writes the merged diagram into the file either way. When something needs a decision
+it keeps your side, adds one `%% CONFLICT:` comment per conflict after the header, and exits 1,
+so `git merge` stops and lists the file as conflicted:
+
+```text
+architecture-beta
+  %% CONFLICT: Node "x" label changed on both sides: ours "Ours X", theirs "Theirs X" (base "X"); kept ours
+  group vpc(cloud)[VPC]
+  service x(server)[Ours X] in vpc
+  ...
+```
+
+The file still parses and renders (the notes are Mermaid comments). Edit what you want to
+change, delete the `%% CONFLICT` lines, then `git add` the file and finish the merge. If one of
+the versions does not parse, the driver falls back to `git merge-file`, which leaves the usual
+`<<<<<<<` markers when the lines conflict.
+
+The command contract is git's: `merge-driver <base> <ours> <theirs> [<path>]` (`%O %A %B %P`),
+the result is written to `<ours>`, exit 0 means merged cleanly and 1 means conflicts remain.
 
 ## Keep diagrams in sync in CI
 

@@ -4,8 +4,9 @@ An [MCP](https://modelcontextprotocol.io) server that lets AI assistants create 
 OpsDraw architecture diagrams and import Terraform into them.
 
 Diagrams are plain Mermaid `architecture-beta` files (`.mmd` / `.mermaid`), so they render on
-GitHub and GitLab as-is. Canvas positions are kept in `%% @pos <id> x y [w h]` comment lines that
-Mermaid ignores. If the OpsDraw app has a file open, it live-reloads the changes the server
+GitHub and GitLab as-is. Canvas positions are kept in `%% @pos <id> x y [w h]` comment lines, and
+edge routes from `auto_layout` in `%% @route <from> <to> x,y x,y ...` lines (absolute bend points),
+which Mermaid ignores. If the OpsDraw app has a file open, it live-reloads the changes the server
 writes.
 
 ## Install

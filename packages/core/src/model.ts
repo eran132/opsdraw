@@ -3,6 +3,19 @@ export type Side = 'T' | 'B' | 'L' | 'R';
 
 export type NodeKind = 'service' | 'group' | 'junction';
 
+export interface Point {
+  x: number;
+  y: number;
+}
+
+/** An absolute rectangle in canvas space. */
+export interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 export interface ArchNode {
   id: string;
   kind: NodeKind;
@@ -25,6 +38,11 @@ export interface ArchEdge {
   arrowStart?: boolean;
   arrowEnd?: boolean;
   label?: string;
+  /**
+   * Orthogonal bend points between the two attachment sides, in absolute canvas coordinates
+   * (stored as `%% @route`). Only valid while both ends stay where they were when it was routed.
+   */
+  route?: Point[];
 }
 
 /** Canvas geometry. Positions are relative to the parent group, like the canvas uses them. */

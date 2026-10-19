@@ -9,6 +9,7 @@ import {
   autoLayout,
   descendantsOf,
   diffStructure,
+  dropStaleRoutes,
   emptyDiagram,
   isValidId,
   layoutNewNodes,
@@ -598,7 +599,8 @@ export async function updateNode(
     // Positions are relative to the parent group, so the old one is meaningless now.
     const layout = { ...d.layout };
     delete layout[node.id];
-    d = { ...d, layout };
+    // Its stored edge routes (and those of anything inside it) no longer fit.
+    d = dropStaleRoutes(diagram, { ...d, layout });
   }
 
   let id = node.id;

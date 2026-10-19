@@ -1,11 +1,15 @@
+import { spawnSync } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import {
+  annotateConflicts,
   autoLayout,
+  diffStructure,
   edgeKey,
   importIac,
   layoutNewNodes,
   lintDiagram,
+  merge3,
   mergeLayout,
   nodeChanges,
   parseArchitecture,
@@ -22,6 +26,8 @@ export interface Io {
   stdout: (text: string) => void;
   stderr: (text: string) => void;
   cwd: string;
+  /** Path of the running CLI script (process.argv[1]); used by git-setup for a local driver. */
+  entry?: string;
 }
 
 /** Exit codes: 0 success / up to date, 1 failure / drift / invalid diagram, 2 usage error. */
@@ -35,6 +41,9 @@ Usage:
   opsdraw import <path...> -o <out.mmd> [options]
   opsdraw export <in.mmd> -o <out.svg> [--theme light|dark|auto]
   opsdraw validate <file.mmd...> [--strict]
+  opsdraw diff <old.mmd> <new.mmd>
+  opsdraw merge-driver <base> <ours> <theirs> [<path>]
+  opsdraw git-setup [--apply] [--driver auto|npx|local]
   opsdraw <command> --help
   opsdraw --version
 
@@ -46,6 +55,11 @@ Commands:
             yet (use the OpsDraw app for PNG).
   validate  Parse diagrams and report problems as file:line: message, plus lint warnings
             (edges sharing a node side, unknown icons, ...). --strict fails on warnings.
+  diff      Print the structural differences between two diagrams, plus moved nodes.
+  merge-driver
+            Git merge driver: three-way merges diagrams semantically (layout never
+            conflicts). Install it with "opsdraw git-setup --apply".
+  git-setup Print (or with --apply, run) the git config that installs the merge driver.
 
 Exit codes: 0 ok, 1 errors or drift (--check), 2 usage error or missing file.
 `;
@@ -369,10 +383,224 @@ async function cmdValidate(argv: string[], io: Io): Promise<number> {
   return missing ? EXIT.usage : EXIT.ok;
 }
 
+const DIFF_HELP = `Usage: opsdraw diff <old.mmd> <new.mmd>
+
+Prints what changed structurally from <old> to <new>: added, removed and changed nodes and
+edges, and the title. Layout changes are summarized as counts of moved and resized nodes.
+
+Exits 0 whether or not there are differences, 1 if a diagram does not parse, 2 on usage
+errors or a missing file.
+`;
+
+const MERGE_DRIVER_HELP = `Usage: opsdraw merge-driver <base> <ours> <theirs> [<path>]
+
+Git merge driver (git passes %O %A %B %P). Merges the three versions of a diagram
+semantically and writes the result into <ours>:
+
+  - nodes and edges added on either side are kept; a deletion wins unless the other side
+    changed that node or edge;
+  - the same field (label, icon, group, arrows...) changed differently on both sides is a
+    conflict, and ours is kept;
+  - layout never conflicts: each node keeps the position of the side that moved it (ours if
+    both did).
+
+Exits 0 on a clean merge. On conflicts, the merged file gets one "%% CONFLICT: ..." comment
+line per conflict after the header (it still parses and renders) and the exit code is 1, so
+git reports the file as conflicted. If a version does not parse, a line-based merge with the
+usual conflict markers is done instead (git merge-file).
+`;
+
+const GIT_SETUP_HELP = `Usage: opsdraw git-setup [--apply] [--driver auto|npx|local]
+
+Prints the commands that install the OpsDraw merge driver in the current repository:
+a merge.opsdraw driver in .git/config and "*.mmd merge=opsdraw" / "*.mermaid merge=opsdraw"
+lines in .gitattributes. With --apply, runs them (idempotently).
+
+Options:
+      --apply           Run the commands instead of printing them.
+      --driver <kind>   npx: "npx --yes opsdraw merge-driver ..." (needs the npm package).
+                        local: "node <this CLI's path> merge-driver ...".
+                        auto (default): local when this CLI runs from a checkout, npx when it
+                        was installed from npm.
+  -h, --help            Show this help.
+`;
+
+async function readDiagram(
+  file: string,
+  io: Io,
+): Promise<{ name: string; diagram: Diagram } | number> {
+  const abs = path.resolve(io.cwd, file);
+  const name = displayPath(io.cwd, abs);
+  const text = await readIfExists(abs);
+  if (text === null) throw new UsageError(`Diagram "${file}" not found`);
+  const { diagram, errors } = parseArchitecture(text);
+  if (errors.length) {
+    io.stderr(formatErrors(name, errors));
+    return EXIT.fail;
+  }
+  return { name, diagram };
+}
+
+async function cmdDiff(argv: string[], io: Io): Promise<number> {
+  const { positionals, options } = parseArgs(argv, HELP_OPT);
+  if (options.help) {
+    io.stdout(DIFF_HELP);
+    return EXIT.ok;
+  }
+  if (positionals.length !== 2) throw new UsageError('diff needs exactly two diagrams');
+  const a = await readDiagram(positionals[0]!, io);
+  const b = await readDiagram(positionals[1]!, io);
+  if (typeof a === 'number' || typeof b === 'number') return EXIT.fail;
+
+  const d = diffStructure(a.diagram, b.diagram);
+  let moved = 0;
+  let resized = 0;
+  for (const n of b.diagram.nodes) {
+    const was = a.diagram.layout[n.id];
+    const now = b.diagram.layout[n.id];
+    if (!was || !now || !a.diagram.nodes.some((m) => m.id === n.id)) continue;
+    if (was.x !== now.x || was.y !== now.y) moved++;
+    if (was.w !== now.w || was.h !== now.h) resized++;
+  }
+  io.stdout(`${a.name} -> ${b.name}\n`);
+  io.stdout(hasChanges(d) ? `${countLine(d)}\n` : 'No structural changes\n');
+  io.stdout(formatDiff(d, a.diagram, b.diagram));
+  io.stdout(`Layout: ${moved} moved, ${resized} resized nodes\n`);
+  return EXIT.ok;
+}
+
+async function cmdMergeDriver(argv: string[], io: Io): Promise<number> {
+  const { positionals, options } = parseArgs(argv, HELP_OPT);
+  if (options.help) {
+    io.stdout(MERGE_DRIVER_HELP);
+    return EXIT.ok;
+  }
+  if (positionals.length < 3 || positionals.length > 4)
+    throw new UsageError('merge-driver needs <base> <ours> <theirs> [<path>]');
+  const [basePath, oursPath, theirsPath] = positionals.map((p) => path.resolve(io.cwd, p));
+  const name = positionals[3] ?? displayPath(io.cwd, oursPath!);
+  const texts: string[] = [];
+  for (const [i, p] of [basePath!, oursPath!, theirsPath!].entries()) {
+    const t = await readIfExists(p);
+    if (t === null) throw new UsageError(`merge-driver: "${positionals[i]}" not found`);
+    texts.push(t);
+  }
+  const [base, ours, theirs] = texts as [string, string, string];
+  const { text, conflicts } = merge3(base, ours, theirs);
+
+  if (conflicts.some((c) => c.kind === 'parse')) {
+    for (const c of conflicts) io.stderr(`opsdraw: ${name}: ${c.message}\n`);
+    // Fall back to git's own line-based merge so nothing from theirs is silently lost.
+    const r = spawnSync(
+      'git',
+      ['merge-file', '-L', 'ours', '-L', 'base', '-L', 'theirs', oursPath!, basePath!, theirsPath!],
+      { cwd: io.cwd, encoding: 'utf8' },
+    );
+    if (r.status === 0) {
+      io.stderr(`opsdraw: ${name}: merged line by line without conflicts\n`);
+      return EXIT.ok;
+    }
+    io.stderr(
+      r.status !== null && r.status > 0
+        ? `opsdraw: ${name}: line-based merge left conflict markers\n`
+        : `opsdraw: ${name}: line-based merge failed; kept ours\n`,
+    );
+    return EXIT.fail;
+  }
+
+  let out = annotateConflicts(text, conflicts);
+  if (/\r\n/.test(ours)) out = out.replace(/\r?\n/g, '\r\n');
+  await fs.writeFile(oursPath!, out, 'utf8');
+  if (!conflicts.length) return EXIT.ok;
+  io.stderr(`opsdraw: ${name}: ${conflicts.length} conflict(s), marked with %% CONFLICT lines:\n`);
+  for (const c of conflicts) io.stderr(`  ${c.message}\n`);
+  return EXIT.fail;
+}
+
+const ATTRIBUTE_PATTERNS = ['*.mmd', '*.mermaid'];
+const shQuote = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
+
+/** True when the script lives in an npm install (node_modules, npx cache), not a checkout. */
+const isInstalled = (entry: string) => entry.split(/[\\/]/).includes('node_modules');
+
+function driverCommand(kind: string, entry: string | undefined): string {
+  const local = kind === 'local' || (kind === 'auto' && !!entry && !isInstalled(entry));
+  if (!local) return 'npx --yes opsdraw merge-driver %O %A %B %P';
+  if (!entry) throw new UsageError('Cannot tell where this CLI is installed; use --driver npx');
+  // Forward slashes: git runs the driver through sh, where backslashes are escapes.
+  return `node "${path.resolve(entry).replace(/\\/g, '/')}" merge-driver %O %A %B %P`;
+}
+
+/** .gitattributes text with the merge=opsdraw lines added where missing. */
+export function withMergeAttributes(text: string): string {
+  const has = (pattern: string) =>
+    text.split(/\r?\n/).some((l) => {
+      const [p, ...attrs] = l.trim().split(/\s+/);
+      return p === pattern && attrs.includes('merge=opsdraw');
+    });
+  const missing = ATTRIBUTE_PATTERNS.filter((p) => !has(p));
+  if (!missing.length) return text;
+  const sep = text && !text.endsWith('\n') ? '\n' : '';
+  return `${text}${sep}${missing.map((p) => `${p} merge=opsdraw\n`).join('')}`;
+}
+
+async function cmdGitSetup(argv: string[], io: Io): Promise<number> {
+  const { positionals, options } = parseArgs(argv, {
+    ...HELP_OPT,
+    apply: { type: 'boolean' },
+    driver: { type: 'string', choices: ['auto', 'npx', 'local'] },
+  });
+  if (options.help) {
+    io.stdout(GIT_SETUP_HELP);
+    return EXIT.ok;
+  }
+  if (positionals.length) throw new UsageError('git-setup takes no arguments');
+  const driver = driverCommand((options.driver as string | undefined) ?? 'auto', io.entry);
+  const config: [string, string][] = [
+    ['merge.opsdraw.name', 'OpsDraw diagram merge'],
+    ['merge.opsdraw.driver', driver],
+  ];
+
+  if (!options.apply) {
+    io.stdout('# Run in your repository (or use: opsdraw git-setup --apply)\n');
+    for (const [k, v] of config) io.stdout(`git config ${k} ${shQuote(v)}\n`);
+    for (const p of ATTRIBUTE_PATTERNS) io.stdout(`echo '${p} merge=opsdraw' >> .gitattributes\n`);
+    return EXIT.ok;
+  }
+
+  const git = (...args: string[]) => spawnSync('git', args, { cwd: io.cwd, encoding: 'utf8' });
+  const top = git('rev-parse', '--show-toplevel');
+  if (top.error || top.status !== 0) {
+    io.stderr(`opsdraw: git-setup --apply must run inside a git repository\n`);
+    return EXIT.fail;
+  }
+  for (const [k, v] of config) {
+    const r = git('config', k, v);
+    if (r.status !== 0) {
+      io.stderr(`opsdraw: git config ${k} failed: ${r.stderr.trim()}\n`);
+      return EXIT.fail;
+    }
+    io.stdout(`Set ${k} = ${v}\n`);
+  }
+  const attrPath = path.join(top.stdout.trim(), '.gitattributes');
+  const before = (await readIfExists(attrPath)) ?? '';
+  const after = withMergeAttributes(before);
+  if (after === before) {
+    io.stdout('.gitattributes already routes diagrams to the opsdraw driver\n');
+  } else {
+    await fs.writeFile(attrPath, after, 'utf8');
+    io.stdout('Updated .gitattributes (commit it so the driver applies for everyone)\n');
+  }
+  return EXIT.ok;
+}
+
 const COMMANDS: Record<string, (argv: string[], io: Io) => Promise<number>> = {
   import: cmdImport,
   export: cmdExport,
   validate: cmdValidate,
+  diff: cmdDiff,
+  'merge-driver': cmdMergeDriver,
+  'git-setup': cmdGitSetup,
 };
 
 /** Runs the CLI and returns the exit code. Never calls process.exit, so it is testable. */

@@ -11,6 +11,7 @@ const FORMAT = `File format: an opsdraw diagram is a Mermaid "architecture-beta"
   junction <id> [in <group>]
   <from>:<R|L|T|B> [<]--[>] <R|L|T|B>:<to>        (edge; optional label: -[label]-)
 Canvas positions are stored as "%% @pos <id> x y [w h]" comment lines (relative to the parent group), which Mermaid ignores.
+auto_layout also writes "%% @route <from> <to> x,y x,y ..." lines (absolute edge bend points); if you change a node's @pos by hand, delete the @route lines of its edges.
 Ids must start with a letter or "_" and contain only letters, digits, "_" or "-".
 Icons are Mermaid built-ins (cloud, database, disk, internet, server) or "prefix:name" such as lucide:database; use list_icons to find one.`;
 

@@ -9,6 +9,7 @@ process.exitCode = await run(
     stdout: (t) => process.stdout.write(t),
     stderr: (t) => process.stderr.write(t),
     cwd: process.cwd(),
+    entry: process.argv[1],
   },
   version,
 );

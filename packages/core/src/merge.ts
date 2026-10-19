@@ -1,7 +1,7 @@
 import type { ArchEdge, ArchNode, Diagram, NodeLayout } from './model';
+import { descendantsOf } from './model';
 import type { LayoutDirection } from './layout';
-import { GROUP_PADDING, JUNCTION_SIZE, SERVICE_SIZE, autoLayout } from './layout';
-import { sidesFor } from './mermaid';
+import { GROUP_PADDING, JUNCTION_SIZE, SERVICE_SIZE, assignPorts, autoLayout } from './layout';
 import { absoluteRects } from './svg';
 
 /**
@@ -105,21 +105,101 @@ export function structurallyEqual(a: Diagram, b: Diagram): boolean {
   );
 }
 
+/** Edge keys with an occurrence number, so duplicate `from->to` pairs pair up in order. */
+function occurrenceKeys(edges: readonly ArchEdge[]): string[] {
+  const seen = new Map<string, number>();
+  return edges.map((e) => {
+    const k = edgeKey(e);
+    const n = seen.get(k) ?? 0;
+    seen.set(k, n + 1);
+    return `${k}#${n}`;
+  });
+}
+
+const isPlainLink = (e: ArchEdge) =>
+  !e.label && !e.arrowStart && !e.arrowEnd && !e.fromGroup && !e.toGroup;
+
+/**
+ * Junctions that layout added for fan-out (`assignPorts` hubs) are not in a freshly imported
+ * diagram. Puts them back, with the same edges going through them, so a re-import of an
+ * unchanged source is structurally equal to the file that was written.
+ */
+function restoreHubs(previous: Diagram, nodes: ArchNode[], edges: ArchEdge[]) {
+  const ids = new Set(nodes.map((n) => n.id));
+  // Hubs of the previous diagram: junctions the new one lacks, linked from the node they serve.
+  const links = new Map<string, ArchEdge>();
+  for (const hub of previous.nodes) {
+    if (hub.kind !== 'junction' || ids.has(hub.id) || !/_hub\d*$/.test(hub.id)) continue;
+    const link = previous.edges.find((e) => e.to === hub.id && isPlainLink(e));
+    if (link) links.set(hub.id, link);
+  }
+  // The far ends a hub (and the hubs hanging off it) carries edges to and from.
+  const reach = (hub: string, depth = 0): { out: Set<string>; in: Set<string> } => {
+    const out = new Set<string>();
+    const inn = new Set<string>();
+    for (const e of previous.edges) {
+      if (e === links.get(hub)) continue;
+      if (e.from === hub) {
+        if (links.get(e.to) === e && depth < 64) {
+          const sub = reach(e.to, depth + 1);
+          sub.out.forEach((x) => out.add(x));
+          sub.in.forEach((x) => inn.add(x));
+        } else out.add(e.to);
+      } else if (e.to === hub) inn.add(e.from);
+    }
+    return { out, in: inn };
+  };
+  for (const [hub, link] of links) {
+    const owner = link.from;
+    if (!ids.has(owner)) continue;
+    const { out, in: inn } = reach(hub);
+    let moved = 0;
+    for (let i = 0; i < edges.length; i++) {
+      const e = edges[i]!;
+      if (e.from === owner && !e.fromGroup && e.to !== hub && out.has(e.to)) {
+        edges[i] = { ...e, from: hub };
+        moved++;
+      } else if (e.to === owner && !e.toGroup && e.from !== hub && inn.has(e.from)) {
+        edges[i] = { ...e, to: hub };
+        moved++;
+      }
+    }
+    if (!moved) continue;
+    const parent = nodes.find((n) => n.id === owner)?.parent;
+    nodes.push(parent ? { id: hub, kind: 'junction', parent } : { id: hub, kind: 'junction' });
+    ids.add(hub);
+    edges.push({ from: owner, to: hub, fromSide: link.fromSide, toSide: link.toSide });
+  }
+}
+
+/** Ids of a node and all its ancestors. */
+function chain(byId: ReadonlyMap<string, ArchNode>, id: string): string[] {
+  const out: string[] = [];
+  for (let p: string | undefined = id; p && out.length < 64; p = byId.get(p)?.parent) out.push(p);
+  return out;
+}
+
 /**
  * Takes the structure of `next` and the layout of `previous`.
  *
  * - A node that exists in both keeps its previous position (and group size), unless its parent
  *   changed: positions are relative to the parent, so a moved node gets a fresh position.
- * - An edge whose `from->to` pair exists in both keeps its previous sides.
+ * - An edge whose `from->to` pair exists in both keeps its previous sides, and its route when
+ *   neither end (nor any group around them) moved.
+ * - Hub junctions that layout added for fan-out are kept, with their edges.
  * - The previous diagram's free-form comments are kept, and so is its title when `next` has none.
  *
  * Nodes without a position afterwards (new or re-parented) can be placed with `layoutNewNodes`.
  */
 export function mergeLayout(previous: Diagram, next: Diagram): MergeResult {
+  const nodes = next.nodes.map((n) => ({ ...n }));
+  const nextEdges = next.edges.map(({ route: _route, ...e }) => e as ArchEdge);
+  restoreHubs(previous, nodes, nextEdges);
+
   const prevNodes = new Map(previous.nodes.map((n) => [n.id, n]));
   const layout: Record<string, NodeLayout> = {};
   const kept: string[] = [];
-  for (const n of next.nodes) {
+  for (const n of nodes) {
     const prev = prevNodes.get(n.id);
     const pos = previous.layout[n.id];
     if (!prev || !pos || (prev.parent ?? '') !== (n.parent ?? '')) continue;
@@ -127,18 +207,31 @@ export function mergeLayout(previous: Diagram, next: Diagram): MergeResult {
     kept.push(n.id);
   }
 
-  const prevSides = new Map<string, ArchEdge>();
-  for (const e of previous.edges) if (!prevSides.has(edgeKey(e))) prevSides.set(edgeKey(e), e);
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const keptSet = new Set(kept);
+  const stayed = (id: string) => chain(byId, id).every((x) => keptSet.has(x));
+  const prevByKey = new Map<string, ArchEdge>();
+  const prevByOccurrence = new Map<string, ArchEdge>();
+  const prevKeys = occurrenceKeys(previous.edges);
+  previous.edges.forEach((e, i) => {
+    if (!prevByKey.has(edgeKey(e))) prevByKey.set(edgeKey(e), e);
+    prevByOccurrence.set(prevKeys[i]!, e);
+  });
+  const nextKeys = occurrenceKeys(nextEdges);
   const keptEdges = new Set<string>();
-  const edges = next.edges.map((e) => {
-    const prev = prevSides.get(edgeKey(e));
-    if (!prev) return { ...e };
+  const edges = nextEdges.map((e, i) => {
+    const same = prevByOccurrence.get(nextKeys[i]!);
+    const prev = same ?? prevByKey.get(edgeKey(e));
+    if (!prev) return e;
     keptEdges.add(edgeKey(e));
-    return { ...e, fromSide: prev.fromSide, toSide: prev.toSide };
+    const out: ArchEdge = { ...e, fromSide: prev.fromSide, toSide: prev.toSide };
+    if (same?.route && stayed(e.from) && stayed(e.to))
+      out.route = same.route.map((p) => ({ ...p }));
+    return out;
   });
 
   const diagram: Diagram = {
-    nodes: next.nodes.map((n) => ({ ...n })),
+    nodes,
     edges,
     layout,
     comments: next.comments.length ? [...next.comments] : [...previous.comments],
@@ -152,6 +245,37 @@ export function mergeLayout(previous: Diagram, next: Diagram): MergeResult {
     kept: sorted(kept),
     keptEdges: sorted(keptEdges),
   };
+}
+
+/**
+ * Drops the stored route of every edge that no longer fits `next`: one of its ends moved or
+ * was resized (directly, or because a group around it moved), or its sides changed. Use it when
+ * applying an edit to `prev`; such edges fall back to the default drawing.
+ */
+export function dropStaleRoutes(prev: Diagram, next: Diagram): Diagram {
+  if (!next.edges.some((e) => e.route)) return next;
+  const before = absoluteRects(prev);
+  const after = absoluteRects(next);
+  const same = (id: string) => {
+    const a = before.get(id);
+    const b = after.get(id);
+    return !!a && !!b && a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
+  };
+  const prevEdges = new Map<string, ArchEdge>();
+  const prevKeys = occurrenceKeys(prev.edges);
+  prev.edges.forEach((e, i) => prevEdges.set(prevKeys[i]!, e));
+  const keys = occurrenceKeys(next.edges);
+  let changed = false;
+  const edges = next.edges.map((e, i) => {
+    if (!e.route) return e;
+    const p = prevEdges.get(keys[i]!);
+    if (p && p.fromSide === e.fromSide && p.toSide === e.toSide && same(e.from) && same(e.to))
+      return e;
+    changed = true;
+    const { route: _route, ...rest } = e;
+    return rest;
+  });
+  return changed ? { ...next, edges } : next;
 }
 
 export interface LayoutNewNodesOptions {
@@ -168,15 +292,30 @@ interface Box {
 }
 
 const GAP = 48;
+/** Size the canvas and exports give a group without a stored size. */
+const GROUP_DEFAULT = { w: 320, h: 220 };
+/** Minimum free space kept around a newly placed node. */
+const MARGIN = 24;
+const MAX_RING = 200;
+
+const overlaps = (a: Box, b: Box) =>
+  a.x < b.x + b.w + MARGIN &&
+  b.x < a.x + a.w + MARGIN &&
+  a.y < b.y + b.h + MARGIN &&
+  b.y < a.y + a.h + MARGIN;
 
 /**
  * Gives every node outside `pinned` a position, leaving pinned nodes where they are.
  *
- * This is deliberately simple: ELK lays out the whole diagram, then pinned positions are put
- * back. Within each container, newly placed nodes keep their ELK arrangement but are moved as
- * a block below the pinned siblings so they don't land on top of them, and pinned groups grow
- * to fit their children. Edge sides are re-picked from the final geometry, except for
- * `pinnedEdges`. A true incremental layout (ELK with fixed nodes) is future work.
+ * When nothing is pinned this is a full ELK `autoLayout`. Otherwise placement is incremental:
+ * each container (the root or a group) is handled innermost first, and each new node goes inside
+ * its parent, to the right of (`DOWN`: below) an already placed node it connects to, at the first
+ * free spot of a grid scan that keeps clear of existing boxes. New nodes with no placed
+ * neighbour go at the free end of the container (below its content; `DOWN`: to the right). A new
+ * group is sized to its children; pinned groups grow (never shrink or move) to fit theirs.
+ *
+ * Edge sides are then spread with `assignPorts`, keeping `pinnedEdges` as they are. Routes are
+ * kept only for edges whose ends (and the groups around them) didn't move.
  *
  * When every node is pinned (and, if `pinnedEdges` is given, every edge too) the diagram is
  * returned unchanged, so a no-op re-import is byte-stable.
@@ -186,79 +325,174 @@ export async function layoutNewNodes(
   pinned: Set<string>,
   options: LayoutNewNodesOptions = {},
 ): Promise<Diagram> {
+  const direction = options.direction ?? 'RIGHT';
   const isPinned = (id: string) => pinned.has(id) && !!diagram.layout[id];
   const free = diagram.nodes.filter((n) => !isPinned(n.id));
   const repick = (e: ArchEdge) => !options.pinnedEdges?.has(edgeKey(e));
   if (!free.length && !(options.pinnedEdges && diagram.edges.some(repick))) return diagram;
-
-  const elk = free.length ? await autoLayout(diagram, options.direction ?? 'RIGHT') : diagram;
-  const layout: Record<string, NodeLayout> = {};
-  for (const n of diagram.nodes) {
-    const l = isPinned(n.id) ? diagram.layout[n.id] : elk.layout[n.id];
-    if (l) layout[n.id] = { ...l };
-  }
+  if (free.length === diagram.nodes.length) return autoLayout(diagram, direction);
 
   const byId = new Map(diagram.nodes.map((n) => [n.id, n]));
-  const box = (n: ArchNode): Box => {
-    const l = layout[n.id] ?? { x: 0, y: 0 };
-    const size = n.kind === 'junction' ? JUNCTION_SIZE : SERVICE_SIZE;
-    return { x: l.x, y: l.y, w: l.w ?? size.w, h: l.h ?? size.h };
-  };
-  const depth = (n: ArchNode) => {
-    let d = 0;
-    for (let p = n.parent; p && byId.has(p) && d < 64; p = byId.get(p)?.parent) d++;
-    return d;
-  };
   const scopeOf = (n: ArchNode) => (n.parent && byId.has(n.parent) ? n.parent : '');
-
-  // Move each container's new nodes, as one block, below its pinned nodes.
-  const scopes = new Map<string, ArchNode[]>();
+  const kids = new Map<string, ArchNode[]>();
   for (const n of diagram.nodes) {
     const s = scopeOf(n);
-    scopes.set(s, [...(scopes.get(s) ?? []), n]);
+    kids.set(s, [...(kids.get(s) ?? []), n]);
   }
-  for (const kids of scopes.values()) {
-    const old = kids.filter((n) => isPinned(n.id)).map(box);
-    const fresh = kids.filter((n) => !isPinned(n.id));
-    if (!old.length || !fresh.length) continue;
-    const freshBoxes = fresh.map(box);
-    const left = Math.min(...old.map((b) => b.x));
-    const bottom = Math.max(...old.map((b) => b.y + b.h));
-    const dx = left - Math.min(...freshBoxes.map((b) => b.x));
-    const dy = bottom + GAP - Math.min(...freshBoxes.map((b) => b.y));
-    for (const n of fresh) {
-      const l = layout[n.id];
-      if (l) layout[n.id] = { ...l, x: l.x + dx, y: l.y + dy };
-    }
-  }
-
-  // Grow pinned groups (innermost first) so their children fit.
-  const groups = diagram.nodes
-    .filter((n) => n.kind === 'group' && isPinned(n.id))
-    .sort((a, b) => depth(b) - depth(a));
-  for (const g of groups) {
-    const kids = scopes.get(g.id) ?? [];
-    const l = layout[g.id];
-    if (!kids.length || !l) continue;
-    const boxes = kids.map(box);
-    const needW = Math.max(...boxes.map((b) => b.x + b.w)) + GROUP_PADDING.side;
-    const needH = Math.max(...boxes.map((b) => b.y + b.h)) + GROUP_PADDING.side;
-    const cur = box(g);
-    if (needW > cur.w || needH > cur.h) {
-      layout[g.id] = { ...l, w: Math.max(cur.w, needW), h: Math.max(cur.h, needH) };
-    }
-  }
-
-  const out: Diagram = { ...diagram, layout };
-  const rects = absoluteRects(out);
-  const center = (id: string) => {
-    const r = rects.get(id)!;
-    return { x: r.x + r.w / 2, y: r.y + r.h / 2 };
+  const layout: Record<string, NodeLayout> = {};
+  for (const n of diagram.nodes) if (isPinned(n.id)) layout[n.id] = { ...diagram.layout[n.id]! };
+  const placed = new Set(diagram.nodes.filter((n) => isPinned(n.id)).map((n) => n.id));
+  /** Sizes of new groups, known once their children are placed. */
+  const sizes = new Map<string, { w: number; h: number }>();
+  const sizeOf = (n: ArchNode) => {
+    if (n.kind === 'junction') return JUNCTION_SIZE;
+    if (n.kind === 'service') return SERVICE_SIZE;
+    const l = layout[n.id];
+    return sizes.get(n.id) ?? { w: l?.w ?? GROUP_DEFAULT.w, h: l?.h ?? GROUP_DEFAULT.h };
   };
-  out.edges = diagram.edges.map((e) => {
-    if (!repick(e)) return e;
-    if (!rects.has(e.from) || !rects.has(e.to)) return e;
-    return { ...e, ...sidesFor(center(e.from), center(e.to)) };
+  const box = (id: string): Box => {
+    const l = layout[id]!;
+    return { x: l.x, y: l.y, ...sizeOf(byId.get(id)!) };
+  };
+
+  const neighbours = new Map<string, string[]>();
+  for (const e of diagram.edges) {
+    if (e.from === e.to) continue;
+    neighbours.set(e.from, [...(neighbours.get(e.from) ?? []), e.to]);
+    neighbours.set(e.to, [...(neighbours.get(e.to) ?? []), e.from]);
+  }
+  /** The child of `scope` that contains `id` (or is it), if any. */
+  const inScope = (id: string, scope: string): string | undefined => {
+    const c = chain(byId, id);
+    return c.find((x) => byId.has(x) && scopeOf(byId.get(x)!) === scope);
+  };
+  /** A placed sibling that `n` (or something inside it) connects to. */
+  const anchorFor = (n: ArchNode, scope: string): Box | undefined => {
+    const inside = n.kind === 'group' ? descendantsOf(diagram, n.id) : new Set([n.id]);
+    for (const id of inside) {
+      for (const other of neighbours.get(id) ?? []) {
+        const rep = inScope(other, scope);
+        if (rep && rep !== n.id && placed.has(rep)) return box(rep);
+      }
+    }
+    return undefined;
+  };
+
+  const findSpot = (
+    size: { w: number; h: number },
+    anchor: Box | undefined,
+    boxes: Box[],
+    scope: string,
+  ) => {
+    const minX = scope ? GROUP_PADDING.side : -Infinity;
+    const minY = scope ? GROUP_PADDING.top : -Infinity;
+    const stepX = size.w + MARGIN;
+    const stepY = size.h + MARGIN;
+    let base: { x: number; y: number };
+    // Directions the scan may move in from `base`, along the flow and across it.
+    let along: 'x' | 'y';
+    let bothWays: boolean;
+    if (anchor) {
+      along = direction === 'RIGHT' ? 'x' : 'y';
+      bothWays = true;
+      base =
+        direction === 'RIGHT'
+          ? { x: anchor.x + anchor.w + GAP, y: anchor.y + anchor.h / 2 - size.h / 2 }
+          : { x: anchor.x + anchor.w / 2 - size.w / 2, y: anchor.y + anchor.h + GAP };
+    } else if (boxes.length) {
+      // The free end: below the content (DOWN: to the right of it), scanning across.
+      along = direction === 'RIGHT' ? 'y' : 'x';
+      bothWays = false;
+      base =
+        direction === 'RIGHT'
+          ? {
+              x: Math.min(...boxes.map((b) => b.x)),
+              y: Math.max(...boxes.map((b) => b.y + b.h)) + GAP,
+            }
+          : {
+              x: Math.max(...boxes.map((b) => b.x + b.w)) + GAP,
+              y: Math.min(...boxes.map((b) => b.y)),
+            };
+    } else {
+      return scope ? { x: GROUP_PADDING.side, y: GROUP_PADDING.top } : { x: 0, y: 0 };
+    }
+    base = { x: Math.max(base.x, minX), y: Math.max(base.y, minY) };
+    const fits = (p: { x: number; y: number }) =>
+      p.x >= minX && p.y >= minY && !boxes.some((b) => overlaps({ ...p, ...size }, b));
+    for (let ring = 0; ring <= MAX_RING; ring++) {
+      // Cells `ring` steps away (Manhattan): first further along the flow, then across it.
+      for (let a = 0; a <= ring; a++) {
+        const c = ring - a;
+        const across = bothWays && c ? [c, -c] : [c];
+        for (const k of across) {
+          const p =
+            along === 'x'
+              ? { x: base.x + a * stepX, y: base.y + k * stepY }
+              : { x: base.x + k * stepX, y: base.y + a * stepY };
+          if (fits(p)) return p;
+        }
+      }
+    }
+    return base;
+  };
+
+  const fitGroup = (g: ArchNode, boxes: Box[]) => {
+    const needW = boxes.length ? Math.max(...boxes.map((b) => b.x + b.w)) + GROUP_PADDING.side : 0;
+    const needH = boxes.length ? Math.max(...boxes.map((b) => b.y + b.h)) + GROUP_PADDING.side : 0;
+    if (placed.has(g.id)) {
+      const l = layout[g.id]!;
+      const cur = sizeOf(g);
+      if (needW > cur.w || needH > cur.h)
+        layout[g.id] = { ...l, w: Math.max(cur.w, needW), h: Math.max(cur.h, needH) };
+    } else {
+      sizes.set(g.id, {
+        w: Math.max(needW, SERVICE_SIZE.w * 2),
+        h: Math.max(needH, SERVICE_SIZE.h + GROUP_PADDING.top),
+      });
+    }
+  };
+
+  /** Places the new nodes of a container; returns whether anything in it was placed. */
+  const placeScope = (scope: string, depth: number): boolean => {
+    const children = kids.get(scope) ?? [];
+    let changed = false;
+    if (depth < 64)
+      for (const c of children)
+        if (c.kind === 'group' && placeScope(c.id, depth + 1)) changed = true;
+    const boxes = children.filter((c) => placed.has(c.id)).map((c) => box(c.id));
+    const pending = children.filter((c) => !placed.has(c.id));
+    if (pending.length) changed = true;
+    while (pending.length) {
+      // Nodes connected to something already placed go first, so chains grow outwards.
+      let at = 0;
+      let anchor: Box | undefined;
+      for (let i = 0; i < pending.length; i++) {
+        anchor = anchorFor(pending[i]!, scope);
+        if (anchor) {
+          at = i;
+          break;
+        }
+      }
+      const n = pending.splice(at, 1)[0]!;
+      const size = sizeOf(n);
+      const p = findSpot(size, anchor, boxes, scope);
+      layout[n.id] = n.kind === 'group' ? { ...p, w: size.w, h: size.h } : { ...p };
+      placed.add(n.id);
+      boxes.push({ ...p, ...size });
+    }
+    const g = byId.get(scope);
+    if (g && (changed || !placed.has(g.id))) fitGroup(g, boxes);
+    return changed;
+  };
+  placeScope('', 0);
+
+  // Routes stay only where neither end, nor a group around it, moved.
+  const stayed = (id: string) => chain(byId, id).every(isPinned);
+  const edges = diagram.edges.map((e) => {
+    if (!e.route || (stayed(e.from) && stayed(e.to))) return e;
+    const { route: _route, ...rest } = e;
+    return rest;
   });
-  return out;
+  const out: Diagram = { ...diagram, layout, edges };
+  return assignPorts(out, absoluteRects(out), { fixed: (e) => !repick(e) });
 }

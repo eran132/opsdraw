@@ -26,6 +26,7 @@ import {
   type Side,
 } from '@opsdraw/core';
 import { CanvasActionsContext, nodeTypes, type ArchFlowNode } from './nodes';
+import { edgeTypes } from './edges';
 
 export type Selection =
   | { type: 'node'; id: string }
@@ -115,7 +116,8 @@ function toFlowEdges(d: Diagram, selectedIndex: number | null): Edge[] {
     sourceHandle: e.fromSide,
     targetHandle: e.toSide,
     label: e.label,
-    type: 'smoothstep',
+    // Auto-layout's stored route when there is one; it is dropped once an end moves.
+    ...(e.route?.length ? { type: 'routed', data: { route: e.route } } : { type: 'smoothstep' }),
     selected: i === selectedIndex,
     markerEnd: e.arrowEnd ? { type: MarkerType.ArrowClosed, width: 18, height: 18 } : undefined,
     markerStart: e.arrowStart ? { type: MarkerType.ArrowClosed, width: 18, height: 18 } : undefined,
@@ -410,6 +412,7 @@ export function Canvas({ diagram, onChange, selection, onSelect, fitKey, onEditL
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           onNodesChange={onNodesChange}
           onNodeDragStop={onNodeDragStop}
           onConnect={onConnect}

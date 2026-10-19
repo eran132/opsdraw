@@ -9,18 +9,18 @@ Legend: ✅ done · 🔜 next · 📋 planned
 
 ## Already addressed by the design
 
-| Problem elsewhere                                                     | OpsDraw                                                                                   |
-| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Opaque, non-diffable files (draw.io compressed XML)                   | Plain Mermaid text; positions in sorted `%% @pos` lines with rounded coordinates          |
-| Mermaid layouts are random between renders (mermaid#6024, #6166)      | The canvas uses stored positions, so it is deterministic                                  |
-| No manual positioning in Mermaid (mermaid#5420)                       | Drag on the canvas; positions saved in the file                                           |
-| Structurizr loses positions when elements are renamed                 | Positions live next to the ids in the same file; renames carry them over                  |
-| Vendor icons can't be bundled legally (mermaid#6109, drawio#1058)     | Users import official packs locally ([TRADEMARKS.md](../TRADEMARKS.md))                   |
-| Tools that must run `terraform` or need cloud credentials             | Reads source files only; never executes anything                                          |
-| Native dependency install failures (pygraphviz, Electron postinstall) | Pure JavaScript (ELK.js), no native modules                                               |
-| Hosted endpoints receiving confidential architecture                  | Local-first; MCP server is stdio-only, opens no ports, and refuses paths outside its root |
-| LLMs write invalid syntax with no feedback                            | MCP `write_diagram` / `validate` return line-numbered errors and write nothing on failure |
-| Edge labels missing in `architecture-beta` (mermaid#6322)             | Supported (`-[label]-`); verified to render with Mermaid 12                               |
+| Problem elsewhere                                                     | OpsDraw                                                                                     |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Opaque, non-diffable files (draw.io compressed XML)                   | Plain Mermaid text; rounded positions in `%% @pos` lines, sorted edge routes in `%% @route` |
+| Mermaid layouts are random between renders (mermaid#6024, #6166)      | The canvas uses stored positions, so it is deterministic                                    |
+| No manual positioning in Mermaid (mermaid#5420)                       | Drag on the canvas; positions saved in the file                                             |
+| Structurizr loses positions when elements are renamed                 | Positions live next to the ids in the same file; renames carry them over                    |
+| Vendor icons can't be bundled legally (mermaid#6109, drawio#1058)     | Users import official packs locally ([TRADEMARKS.md](../TRADEMARKS.md))                     |
+| Tools that must run `terraform` or need cloud credentials             | Reads source files only; never executes anything                                            |
+| Native dependency install failures (pygraphviz, Electron postinstall) | Pure JavaScript (ELK.js), no native modules                                                 |
+| Hosted endpoints receiving confidential architecture                  | Local-first; MCP server is stdio-only, opens no ports, and refuses paths outside its root   |
+| LLMs write invalid syntax with no feedback                            | MCP `write_diagram` / `validate` return line-numbered errors and write nothing on failure   |
+| Edge labels missing in `architecture-beta` (mermaid#6322)             | Supported (`-[label]-`); verified to render with Mermaid 12                                 |
 
 ## Correctness and compatibility
 
@@ -38,8 +38,10 @@ Legend: ✅ done · 🔜 next · 📋 planned
   exported SVG next to it or (b) write built-in fallbacks.
 - ✅ **Icon validation in MCP.** Reject unknown icon names with nearest-match suggestions
   (LLMs hallucinate icon names).
-- 🔜 **Port conflicts.** (`validate` warns today; automatic port spreading is next.) Mermaid allows one edge per node side (mermaid PR #5452). Spread ports in
-  auto-layout, insert junctions for fan-out, and warn in `validate`.
+- ✅ **Port conflicts.** Mermaid allows one edge per node side (mermaid PR #5452). Auto-layout
+  spreads ports (each edge end takes the free side closest to facing the other node), routes
+  fan-out beyond four edges through `<node>_hub` junctions (kept on re-import), and `validate`
+  warns about conflicts in hand-written files.
 
 ## Infrastructure as code
 
@@ -66,10 +68,12 @@ Legend: ✅ done · 🔜 next · 📋 planned
 
 ## Editor
 
-- 📋 **Incremental layout:** pin nodes the user placed and lay out only new ones (D2/TALA's
-  headline feature).
-- 📋 **Edge routing:** ELK orthogonal routing, saved bend points, line jumps at crossings
-  (drawio#5772, Excalidraw#157).
+- ✅ **Incremental layout:** nodes the user placed stay pinned; re-imports place only new nodes,
+  inside their group and next to what they connect to, without overlaps, growing groups to fit
+  (D2/TALA's headline feature).
+- ✅ **Edge routing:** ELK orthogonal routes saved as `%% @route` bend points, drawn on the
+  canvas and in exports, and dropped when an end moves (drawio#5772). 📋 Not done yet: line
+  jumps at crossings (Excalidraw#157).
 - ✅ **Large diagrams:** ELK in a Web Worker, render only visible nodes, debounced parsing, and a
   500-node benchmark in CI (drawio#3636, Excalidraw#628).
 - ✅ **Alignment tools:** snap guides, align/distribute, fast keyboard nudging.

@@ -5,6 +5,7 @@ import type {
   NodeLayout,
   ParseError,
   ParseResult,
+  Point,
   Side,
 } from './model';
 import { emptyDiagram, idProblem, isValidIconRef } from './model';
@@ -14,6 +15,8 @@ import { emptyDiagram, idProblem, isValidIconRef } from './model';
  *
  * Canvas positions are stored as `%% @pos <id> <x> <y> [<w> <h>]` comment lines, which Mermaid
  * ignores, so the file stays valid Mermaid that renders anywhere (GitHub, GitLab, docs sites).
+ * Edge routes from auto-layout are stored the same way, as `%% @route <from> <to> x,y x,y ...`
+ * (absolute bend points between the two attachment sides).
  */
 
 const ID = '[A-Za-z_][\\w-]*';
@@ -27,6 +30,9 @@ const EDGE_RE = new RegExp(
 const POS_RE = new RegExp(
   `^%%\\s*@pos\\s+(${ID})\\s+(-?[\\d.]+)\\s+(-?[\\d.]+)(?:\\s+([\\d.]+)\\s+([\\d.]+))?\\s*$`,
 );
+const ROUTE_RE = new RegExp(
+  `^%%\\s*@route\\s+(${ID})\\s+(${ID})((?:\\s+-?[\\d.]+,-?[\\d.]+)+)\\s*$`,
+);
 
 export function parseArchitecture(source: string): ParseResult {
   const diagram = emptyDiagram();
@@ -34,6 +40,8 @@ export function parseArchitecture(source: string): ParseResult {
   const lines = source.replace(/\r\n?/g, '\n').split('\n');
   const declaredAt = new Map<string, number>();
   const edgeLines: number[] = [];
+  const routes: { from: string; to: string; points: Point[] }[] = [];
+  let route: RegExpExecArray | null;
   let i = 0;
 
   // Optional YAML front matter; only `title` is interpreted.
@@ -65,6 +73,16 @@ export function parseArchitecture(source: string): ParseResult {
           layout.h = Number(pos[5]);
         }
         diagram.layout[pos[1]!] = layout;
+      } else if ((route = ROUTE_RE.exec(line))) {
+        const points = route[3]!
+          .trim()
+          .split(/\s+/)
+          .map((p) => {
+            const [x, y] = p.split(',');
+            return { x: Number(x), y: Number(y) };
+          });
+        if (points.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y)))
+          routes.push({ from: route[1]!, to: route[2]!, points });
       } else if (!/^%%\s*@/.test(line)) {
         diagram.comments.push(line.replace(/^%%\s?/, ''));
       }
@@ -134,6 +152,14 @@ export function parseArchitecture(source: string): ParseResult {
     }
   });
 
+  // Routes attach, in order, to the edges with the same ends. Routes for edges or nodes that no
+  // longer exist are stale and dropped without an error.
+  for (const r of routes) {
+    if (!declaredAt.has(r.from) || !declaredAt.has(r.to)) continue;
+    const edge = diagram.edges.find((e) => e.from === r.from && e.to === r.to && !e.route);
+    if (edge) edge.route = r.points;
+  }
+
   return { diagram, errors };
 
   function addNode(raw: ArchNode, lineNo: number) {
@@ -159,6 +185,7 @@ export function parseArchitecture(source: string): ParseResult {
 
 const cleanLabel = (s: string) => s.replace(/[[\]\n\r]/g, ' ').trim();
 const round = (v: number) => Math.round(v);
+const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
 export function serializeArchitecture(diagram: Diagram): string {
   const out: string[] = [];
@@ -205,12 +232,20 @@ export function serializeArchitecture(diagram: Diagram): string {
   }
 
   const positioned = diagram.nodes.filter((n) => diagram.layout[n.id]);
-  if (positioned.length) {
+  // Sorted by ends (stable for duplicate pairs), so routes diff cleanly.
+  const routed = diagram.edges
+    .filter((e) => e.route?.length && byId.has(e.from) && byId.has(e.to))
+    .sort((a, b) => cmp(a.from, b.from) || cmp(a.to, b.to));
+  if (positioned.length || routed.length) {
     out.push('', '  %% @layout opsdraw canvas positions (Mermaid ignores these lines)');
     for (const n of positioned) {
       const l = diagram.layout[n.id]!;
       const size = l.w !== undefined && l.h !== undefined ? ` ${round(l.w)} ${round(l.h)}` : '';
       out.push(`  %% @pos ${n.id} ${round(l.x)} ${round(l.y)}${size}`);
+    }
+    for (const e of routed) {
+      const pts = e.route!.map((p) => `${round(p.x)},${round(p.y)}`).join(' ');
+      out.push(`  %% @route ${e.from} ${e.to} ${pts}`);
     }
   }
   return out.join('\n') + '\n';

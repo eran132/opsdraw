@@ -6,7 +6,10 @@ and can be generated from your infrastructure code or by an AI assistant over MC
 
 - **Two-way sync.** Edit the Mermaid `architecture-beta` text and the canvas follows; drag, connect,
   nest or rename on the canvas and the text is rewritten. Canvas positions are stored as
-  `%% @pos` comments, which Mermaid ignores, so the file stays valid Mermaid everywhere.
+  `%% @pos` comments and auto-layout's orthogonal edge routes as `%% @route <from> <to> x,y …`
+  comments, which Mermaid ignores, so the file stays valid Mermaid everywhere. Auto-layout gives
+  each edge its own node side, as Mermaid requires, adding a junction where a node has more than
+  four connections; re-imports place only new nodes, next to what they connect to.
 - **Diagrams from infrastructure code.** Import Terraform, CloudFormation, Kubernetes manifests
   (including OpenShift, KubeVirt, Gateway API, Helm/Flux/Argo apps), cluster configs (k0sctl, Talos,
   k3s/RKE2), Docker Compose, Ansible inventories and Nomad jobs. On-prem virtualization is covered

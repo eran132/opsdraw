@@ -33,3 +33,4 @@ export function parseMermaid(source: string): ParseResult & { kind: 'architectur
 }
 export * from './merge';
 export * from './lint';
+export * from './merge3';

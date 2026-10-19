@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ReactFlowProvider } from '@xyflow/react';
 import {
+  dropStaleRoutes,
   emptyDiagram,
   importIac,
   parseMermaid,
@@ -119,6 +120,14 @@ export function App() {
     setIsFlowchart(false);
     setTextState(serializeArchitecture(d));
   }, []);
+
+  const diagramRef = useRef(diagram);
+  diagramRef.current = diagram;
+  /** An edit made on the canvas or in the inspector: routes of edges it moved are dropped. */
+  const editDiagram = useCallback(
+    (d: Diagram) => applyDiagram(dropStaleRoutes(diagramRef.current, d)),
+    [applyDiagram],
+  );
 
   /** Loads new content; diagrams without any positions get an automatic layout. */
   const loadText = useCallback(
@@ -392,7 +401,7 @@ export function App() {
             {view === 'canvas' ? (
               <Canvas
                 diagram={diagram}
-                onChange={applyDiagram}
+                onChange={editDiagram}
                 selection={selection}
                 onSelect={setSelection}
                 fitKey={fitKey}
@@ -402,14 +411,14 @@ export function App() {
               <Preview
                 text={text}
                 diagram={isFlowchart ? undefined : diagram}
-                onChange={applyDiagram}
+                onChange={editDiagram}
               />
             )}
           </section>
           <Inspector
             diagram={diagram}
             selection={selection}
-            onChange={applyDiagram}
+            onChange={editDiagram}
             onSelect={setSelection}
             focusLabel={focusLabel}
           />
