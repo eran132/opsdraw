@@ -7,7 +7,7 @@ const ar: Messages = {
     open: 'فتح…',
     save: 'حفظ',
     saveAs: 'حفظ باسم…',
-    importTerraform: 'استيراد Terraform…',
+    importIac: 'استيراد البنية التحتية…',
     exportSvg: 'تصدير SVG',
     exportPng: 'تصدير PNG',
     layoutRight: 'تخطيط تلقائي →',
@@ -66,6 +66,7 @@ const ar: Messages = {
     reload: 'إعادة التحميل',
     keepMine: 'الاحتفاظ بنسختي',
     discardConfirm: 'هل تريد تجاهل التغييرات غير المحفوظة؟',
+    noEmbeddedSource: 'لا تحتوي هذه الصورة على مخطط OpsDraw مضمّن.',
   },
   packs: {
     title: 'حزم الأيقونات',

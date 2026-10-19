@@ -17,6 +17,10 @@ import {
  * more than one appears. Services link to the workloads their selector matches, Ingresses and
  * routes link to their backend Services, and workloads link to the claims they mount.
  * ConfigMaps, Secrets, RBAC, HPAs and similar are hidden unless `includeAll` is set.
+ *
+ * Distro extras: OpenShift Routes link to their target Services, KubeVirt / Harvester virtual
+ * machines are selected by Services like workloads, and k3s HelmCharts, Flux HelmReleases and
+ * Argo CD Applications show up as deployable packages.
  */
 
 export type KubernetesImportOptions = IacImportOptions;
@@ -25,9 +29,11 @@ interface K8sObject {
   kind: string;
   name: string;
   namespace: string;
+  apiVersion: string;
   raw: Record<string, unknown>;
 }
 
+const VIRTUAL_MACHINES = new Set(['VirtualMachine', 'VirtualMachineInstance']);
 const WORKLOADS = new Set([
   'Deployment',
   'StatefulSet',
@@ -36,8 +42,11 @@ const WORKLOADS = new Set([
   'Job',
   'CronJob',
   'Pod',
+  ...VIRTUAL_MACHINES,
 ]);
 const ROUTES = new Set(['HTTPRoute', 'GRPCRoute', 'TLSRoute', 'TCPRoute', 'UDPRoute']);
+/** Helm / GitOps deployables: k3s HelmChart, Flux HelmRelease, Argo CD Application(Set). */
+const PACKAGES = new Set(['HelmChart', 'HelmRelease', 'Application', 'ApplicationSet']);
 /** Hidden unless `includeAll`. */
 const PLUMBING = new Set([
   'ConfigMap',
@@ -77,7 +86,13 @@ function loadKubernetesObjects(files: IacFile[]): K8sObject[] {
     const meta = isRecord(v.metadata) ? v.metadata : {};
     const name = asString(meta.name);
     if (!name) return;
-    out.push({ kind: v.kind, name, namespace: asString(meta.namespace) ?? 'default', raw: v });
+    out.push({
+      kind: v.kind,
+      name,
+      namespace: asString(meta.namespace) ?? 'default',
+      apiVersion: asString(v.apiVersion) ?? '',
+      raw: v,
+    });
   };
   for (const f of files) for (const doc of loadYamlDocuments(f.content)) visit(doc);
   return out;
@@ -117,7 +132,7 @@ export function parseKubernetes(files: IacFile[], options: KubernetesImportOptio
     const id = makeId(base, taken);
     taken.push(id);
     ids.set(key, id);
-    const node: ArchNode = { id, kind: 'service', label: o.name, icon: iconFor(o) };
+    const node: ArchNode = { id, kind: 'service', label: labelFor(o), icon: iconFor(o) };
     const parent = groupIds.get(o.namespace);
     if (parent) node.parent = parent;
     diagram.nodes.push(node);
@@ -149,6 +164,11 @@ export function parseKubernetes(files: IacFile[], options: KubernetesImportOptio
       }
     } else if (o.kind === 'Ingress') {
       for (const name of ingressBackends(spec)) link(o, 'Service', name);
+    } else if (o.kind === 'Route') {
+      // OpenShift route.openshift.io/v1: `spec.to` plus weighted `spec.alternateBackends`.
+      for (const t of [spec.to, ...asArray(spec.alternateBackends)]) {
+        if (isRecord(t)) link(o, asString(t.kind) ?? 'Service', asString(t.name));
+      }
     } else if (ROUTES.has(o.kind)) {
       for (const p of asArray(spec.parentRefs)) {
         if (!isRecord(p)) continue;
@@ -176,6 +196,11 @@ export function parseKubernetes(files: IacFile[], options: KubernetesImportOptio
         if (!isRecord(v)) continue;
         if (isRecord(v.persistentVolumeClaim))
           link(o, 'PersistentVolumeClaim', asString(v.persistentVolumeClaim.claimName));
+        // KubeVirt disks backed by a CDI DataVolume (which owns a PVC of the same name).
+        if (isRecord(v.dataVolume)) {
+          link(o, 'DataVolume', asString(v.dataVolume.name));
+          link(o, 'PersistentVolumeClaim', asString(v.dataVolume.name));
+        }
       }
       if (options.includeAll) {
         for (const [kind, name] of configRefs(pod)) link(o, kind, name);
@@ -191,7 +216,42 @@ export function parseKubernetes(files: IacFile[], options: KubernetesImportOptio
   return diagram;
 }
 
+function labelFor(o: K8sObject): string {
+  if (!PACKAGES.has(o.kind)) return o.name;
+  const chart = packageChart(o);
+  return chart && chart !== o.name ? `${o.name} (${chart})` : o.name;
+}
+
+/** Chart (or Git path) a HelmChart / HelmRelease / Argo CD Application deploys. */
+function packageChart(o: K8sObject): string | undefined {
+  const spec = isRecord(o.raw.spec) ? o.raw.spec : {};
+  if (o.kind === 'HelmChart') return asString(spec.chart);
+  if (o.kind === 'HelmRelease') {
+    if (isRecord(spec.chart)) {
+      const inner = isRecord(spec.chart.spec) ? spec.chart.spec : {};
+      return asString(inner.chart);
+    }
+    if (isRecord(spec.chartRef)) return asString(spec.chartRef.name);
+    return asString(spec.chart);
+  }
+  if (o.kind === 'ApplicationSet' && isRecord(spec.template)) {
+    const t = spec.template;
+    return packageChart({ ...o, kind: 'Application', raw: { spec: t.spec } });
+  }
+  const sources = [spec.source, ...asArray(spec.sources)].filter(isRecord);
+  for (const s of sources) {
+    const chart = asString(s.chart) ?? asString(s.path);
+    if (chart) return chart;
+  }
+  return undefined;
+}
+
 function iconFor(o: K8sObject): string {
+  if (VIRTUAL_MACHINES.has(o.kind)) return 'server';
+  if (PACKAGES.has(o.kind)) return 'lucide:package';
+  if (o.kind === 'Gateway') return 'lucide:router';
+  if (o.kind === 'Route' && isRecord(o.raw.spec) && isRecord(o.raw.spec.to))
+    return 'lucide:waypoints';
   if (WORKLOADS.has(o.kind)) {
     const images = containers(podTemplate(o).spec)
       .map((c) => asString(c.image) ?? '')
@@ -206,10 +266,10 @@ function iconFor(o: K8sObject): string {
     case 'Service':
       return 'lucide:split';
     case 'Ingress':
-    case 'Gateway':
       return 'internet';
     case 'PersistentVolumeClaim':
     case 'PersistentVolume':
+    case 'DataVolume':
       return 'disk';
     case 'ConfigMap':
       return 'lucide:file-cog';
@@ -230,13 +290,16 @@ function iconFor(o: K8sObject): string {
   return ROUTES.has(o.kind) ? 'lucide:waypoints' : 'lucide:box';
 }
 
-/** Pod template labels and spec of a workload (a Pod is its own template). */
+/**
+ * Pod template labels and spec of a workload (a Pod or VirtualMachineInstance is its own
+ * template; a VirtualMachine carries its VMI template in `spec.template` like a Deployment).
+ */
 function podTemplate(o: K8sObject): {
   labels: Record<string, unknown>;
   spec: Record<string, unknown>;
 } {
   let t: unknown = o.raw;
-  if (o.kind !== 'Pod') {
+  if (o.kind !== 'Pod' && o.kind !== 'VirtualMachineInstance') {
     let spec = isRecord(o.raw.spec) ? o.raw.spec : {};
     if (o.kind === 'CronJob') {
       const job = isRecord(spec.jobTemplate) ? spec.jobTemplate : {};

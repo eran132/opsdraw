@@ -24,11 +24,11 @@ Legend: ✅ done · 🔜 next · 📋 planned
 
 ## Correctness and compatibility
 
-- 🔜 **Mermaid-safe output.** Mermaid rejects some label characters (mermaid#6056, #7232) and
+- ✅ **Mermaid-safe output.** Mermaid rejects some label characters (mermaid#6056, #7232) and
   reportedly ids starting with `T/B/L/R` (#7022). Validate every serialized file with the real
   Mermaid parser in tests, escape or replace unsafe characters, and keep the full Unicode label
   where Mermaid can't hold it.
-- 🔜 **Exports that match the canvas.** Mermaid's renderer ignores `@pos`, so exports drawn by
+- ✅ **Exports that match the canvas.** Mermaid's renderer ignores `@pos`, so exports drawn by
   Mermaid don't look like the canvas. Add SVG/PNG export from canvas geometry, with plain
   `<text>` (no `<foreignObject>`, drawio#774), embedded icons, `<title>`/`<desc>`, light/dark/auto
   themes, and the `.mmd` source embedded in SVG `<metadata>` and PNG `tEXt` so exports can be
@@ -43,7 +43,10 @@ Legend: ✅ done · 🔜 next · 📋 planned
 
 ## Infrastructure as code
 
-- ✅ Terraform, CloudFormation, Kubernetes, Docker Compose; Proxmox, VergeOS, Hyper-V, VirtualBox.
+- ✅ Terraform, CloudFormation, Kubernetes (OpenShift, KubeVirt, Gateway API, Helm/Flux/Argo),
+  cluster configs (k0sctl, Talos, k3s/RKE2), Docker Compose, Ansible inventories, Nomad jobs.
+- ✅ Virtualization via Terraform: Proxmox, VergeOS, vSphere, Xen Orchestra, Nutanix, oVirt,
+  OpenStack, libvirt, LXD/Incus, Harvester, Rancher, Hyper-V, VirtualBox.
 - ✅ MCP `import_iac` with format detection and skipped-file reporting.
 - 🔜 **Plan/state JSON input** (`terraform show -json`): exact `count`/`for_each` expansion,
   modules and data sources (Rover's most requested feature, rover#20).

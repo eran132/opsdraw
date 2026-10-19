@@ -7,7 +7,7 @@ const ja: Messages = {
     open: '開く…',
     save: '保存',
     saveAs: '名前を付けて保存…',
-    importTerraform: 'Terraform をインポート…',
+    importIac: 'インフラをインポート…',
     exportSvg: 'SVG をエクスポート',
     exportPng: 'PNG をエクスポート',
     layoutRight: '自動レイアウト →',
@@ -66,6 +66,7 @@ const ja: Messages = {
     reload: '再読み込み',
     keepMine: '自分の変更を保持',
     discardConfirm: '未保存の変更を破棄しますか?',
+    noEmbeddedSource: 'この画像には OpsDraw の図が埋め込まれていません。',
   },
   packs: {
     title: 'アイコンパック',

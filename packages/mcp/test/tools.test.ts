@@ -385,6 +385,19 @@ spec: { selector: { app: api }, ports: [{ port: 80 }] }
     for (const id of ids) expect(parsed.diagram.layout[id]).toBeDefined();
   });
 
+  it('reads extension-less Ansible inventories and Nomad jobs', async () => {
+    write('ops/hosts', '[db]\ndb01 ansible_host=10.0.0.5\n\n[web]\nweb[1:2]\n');
+    write(
+      'ops/shop.nomad',
+      'job "shop" {\n  group "api" {\n    task "server" {\n      driver = "docker"\n      config { image = "nginx" }\n    }\n  }\n}\n',
+    );
+    write('ops/ignored.cfg', 'x');
+    const r = await tools.importIacFiles(ctx, { source: 'ops', output: 'ops.mmd' });
+    expect(r.kinds.sort()).toEqual(['ansible', 'nomad']);
+    expect(r.files.sort()).toEqual(['ops/hosts', 'ops/shop.nomad']);
+    expect(parseArchitecture(fileText('ops.mmd')).errors).toEqual([]);
+  });
+
   it('fails clearly when nothing is recognized, and respects the root', async () => {
     write('misc/a.json', '{"a": 1}');
     await expect(tools.importIacFiles(ctx, { source: 'misc', output: 'x.mmd' })).rejects.toThrow(

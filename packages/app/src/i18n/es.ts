@@ -7,7 +7,7 @@ const es: Messages = {
     open: 'Abrir…',
     save: 'Guardar',
     saveAs: 'Guardar como…',
-    importTerraform: 'Importar Terraform…',
+    importIac: 'Importar infraestructura…',
     exportSvg: 'Exportar SVG',
     exportPng: 'Exportar PNG',
     layoutRight: 'Diseño automático →',
@@ -66,6 +66,7 @@ const es: Messages = {
     reload: 'Recargar',
     keepMine: 'Conservar el mío',
     discardConfirm: '¿Descartar los cambios sin guardar?',
+    noEmbeddedSource: 'Esta imagen no contiene un diagrama de OpsDraw incrustado.',
   },
   packs: {
     title: 'Paquetes de iconos',

@@ -7,9 +7,17 @@ and can be generated from your infrastructure code or by an AI assistant over MC
 - **Two-way sync.** Edit the Mermaid `architecture-beta` text and the canvas follows; drag, connect,
   nest or rename on the canvas and the text is rewritten. Canvas positions are stored as
   `%% @pos` comments, which Mermaid ignores, so the file stays valid Mermaid everywhere.
-- **Diagrams from infrastructure code.** Import Terraform, CloudFormation, Kubernetes manifests and
-  Docker Compose files. Resources are nested into their networks, plumbing (IAM policies, route
-  table associations…) is hidden, and references become connections.
+- **Diagrams from infrastructure code.** Import Terraform, CloudFormation, Kubernetes manifests
+  (including OpenShift, KubeVirt, Gateway API, Helm/Flux/Argo apps), cluster configs (k0sctl, Talos,
+  k3s/RKE2), Docker Compose, Ansible inventories and Nomad jobs. On-prem virtualization is covered
+  through Terraform: Proxmox, VergeOS, vSphere, Xen Orchestra, Nutanix, oVirt, OpenStack,
+  libvirt/KVM, LXD/Incus, Harvester, Rancher, Hyper-V and VirtualBox. Hosts, clusters and networks
+  become nested groups, plumbing (IAM policies, NICs, route associations…) is hidden, and
+  references become connections.
+- **Exports that match the canvas.** SVG and PNG exports are drawn from your layout (not
+  re-laid-out by Mermaid), use plain text that works in Inkscape, Confluence and other viewers,
+  follow light/dark mode, and embed the diagram source, so an exported image can be reopened and
+  edited.
 - **MCP server.** `opsdraw-mcp` lets Claude and other MCP clients create and edit diagrams and
   import infrastructure code. The app picks up those edits live in the file you have open.
 - **Icons without legal trouble.** A vendor-neutral icon set (Lucide) is built in. Official AWS,

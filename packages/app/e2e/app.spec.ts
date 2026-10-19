@@ -139,16 +139,101 @@ test.describe('mermaid compatibility', () => {
     await expect(page.locator('.preview-error')).toHaveCount(0);
   });
 
-  test('exports an SVG', async ({ page }) => {
+  test('the preview shows how GitHub and other Mermaid renderers will draw it', async ({
+    page,
+  }) => {
     await page.goto('/');
+    await page.getByRole('tab', { name: 'Mermaid preview' }).click();
+    await expect(page.getByTestId('preview-svg').locator('> svg')).toContainText('Jobs queue');
+  });
+});
+
+test.describe('export', () => {
+  async function readDownload(page: Page, button: string) {
     const download = page.waitForEvent('download');
-    await page.getByRole('button', { name: 'Export SVG' }).click();
+    await page.getByRole('button', { name: button }).click();
     const file = await download;
-    expect(file.suggestedFilename()).toBe('untitled.svg');
-    const stream = await file.createReadStream();
-    let body = '';
-    for await (const chunk of stream) body += chunk;
-    expect(body).toMatch(/^<svg/);
+    const chunks: Buffer[] = [];
+    for await (const chunk of await file.createReadStream()) chunks.push(chunk as Buffer);
+    return { name: file.suggestedFilename(), bytes: Buffer.concat(chunks) };
+  }
+
+  test.beforeEach(async ({ page }) => {
+    // Use the <input type=file> path so Playwright can choose files.
+    await page.addInitScript(() => {
+      delete (window as { showOpenFilePicker?: unknown }).showOpenFilePicker;
+    });
+  });
+
+  test('SVG and PNG exports match the canvas and reopen as the same diagram', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('.cm-content')).toContainText('%% @pos api');
+    const original = await page.evaluate(() =>
+      [...document.querySelectorAll('.cm-line')].map((l) => l.textContent).join('\n'),
+    );
+
+    const svg = await readDownload(page, 'Export SVG');
+    expect(svg.name).toBe('untitled.svg');
+    const svgText = svg.bytes.toString('utf8');
+    expect(svgText).toMatch(/^<svg/);
+    expect(svgText).not.toContain('foreignObject');
+    expect(svgText).toContain('>Load balancer</text>');
+    expect(svgText).toContain('<metadata id="opsdraw-source"');
+    // Well-formed XML, as other tools (Inkscape, Confluence, Typora) need.
+    const parseError = await page.evaluate(
+      (t) =>
+        new DOMParser().parseFromString(t, 'image/svg+xml').querySelector('parsererror')
+          ?.textContent ?? null,
+      svgText,
+    );
+    expect(parseError).toBeNull();
+
+    const png = await readDownload(page, 'Export PNG');
+    expect(png.name).toBe('untitled.png');
+    // The PNG still decodes after the source chunk is inserted.
+    const size = await page.evaluate(async (b64) => {
+      const img = new Image();
+      img.src = `data:image/png;base64,${b64}`;
+      await img.decode();
+      return { w: img.naturalWidth, h: img.naturalHeight };
+    }, png.bytes.toString('base64'));
+    expect(size.w).toBeGreaterThan(100);
+
+    for (const f of [
+      { name: 'diagram.svg', mimeType: 'image/svg+xml', buffer: svg.bytes },
+      { name: 'diagram.png', mimeType: 'image/png', buffer: png.bytes },
+    ]) {
+      await setEditorText(page, 'architecture-beta\n');
+      page.once('dialog', (d) => void d.accept());
+      const chooser = page.waitForEvent('filechooser');
+      await page.getByRole('button', { name: 'Open…' }).click();
+      await (await chooser).setFiles(f);
+      await expect(page.locator('.react-flow__node')).toHaveCount(9);
+      await expect(page.locator('.file-name')).toContainText('diagram.mmd');
+      // The editor updates one render after the canvas, so poll.
+      await expect
+        .poll(() =>
+          page.evaluate(() =>
+            [...document.querySelectorAll('.cm-line')].map((l) => l.textContent).join('\n'),
+          ),
+        )
+        .toBe(original);
+    }
+  });
+
+  test('images without an embedded diagram are refused politely', async ({ page }) => {
+    await page.goto('/');
+    const chooser = page.waitForEvent('filechooser');
+    await page.getByRole('button', { name: 'Open…' }).click();
+    await (
+      await chooser
+    ).setFiles({
+      name: 'random.svg',
+      mimeType: 'image/svg+xml',
+      buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>'),
+    });
+    await expect(page.locator('.statusbar')).toContainText('no embedded OpsDraw diagram');
+    await expect(page.locator('.react-flow__node')).toHaveCount(9);
   });
 });
 
@@ -156,7 +241,7 @@ test.describe('infrastructure as code', () => {
   test('imports Terraform into nested groups', async ({ page }) => {
     await page.goto('/');
     const chooser = page.waitForEvent('filechooser');
-    await page.getByRole('button', { name: /Import Terraform/ }).click();
+    await page.getByRole('button', { name: /Import infrastructure/ }).click();
     await (
       await chooser
     ).setFiles({

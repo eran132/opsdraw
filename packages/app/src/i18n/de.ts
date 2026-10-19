@@ -7,7 +7,7 @@ const de: Messages = {
     open: 'Öffnen…',
     save: 'Speichern',
     saveAs: 'Speichern unter…',
-    importTerraform: 'Terraform importieren…',
+    importIac: 'Infrastruktur importieren…',
     exportSvg: 'Als SVG exportieren',
     exportPng: 'Als PNG exportieren',
     layoutRight: 'Auto-Layout →',
@@ -67,6 +67,7 @@ const de: Messages = {
     reload: 'Neu laden',
     keepMine: 'Meine behalten',
     discardConfirm: 'Ungespeicherte Änderungen verwerfen?',
+    noEmbeddedSource: 'Dieses Bild enthält kein eingebettetes OpsDraw-Diagramm.',
   },
   packs: {
     title: 'Icon-Pakete',

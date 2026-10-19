@@ -4,6 +4,8 @@
  * server) can be picked up. Elsewhere it falls back to upload/download.
  */
 
+import { PNG_SOURCE_KEYWORD, embedPngText, extractPngText, extractSvgSource } from '@opsdraw/core';
+
 interface FileHandle {
   name: string;
   getFile(): Promise<File>;
@@ -21,6 +23,35 @@ export const canWriteBack = typeof pickerWindow.showOpenFilePicker === 'function
 const MERMAID_TYPES = [
   { description: 'Mermaid', accept: { 'text/plain': ['.mmd', '.mermaid', '.md'] } },
 ];
+const OPEN_TYPES = [
+  {
+    description: 'Mermaid or OpsDraw export',
+    accept: {
+      'text/plain': ['.mmd', '.mermaid', '.md'],
+      'image/svg+xml': ['.svg'],
+      'image/png': ['.png'],
+    },
+  },
+];
+
+/** Thrown when an image doesn't contain an embedded OpsDraw diagram. */
+export class NoEmbeddedSourceError extends Error {}
+
+/**
+ * Reads a diagram file. SVG and PNG exports made by OpsDraw carry their source, so they open as
+ * a new, unsaved .mmd document (writing Mermaid text back into the image would corrupt it).
+ */
+async function readDiagramFile(file: File, handle?: FileHandle): Promise<OpenedFile> {
+  const base = file.name.replace(/\.[^.]+$/, '');
+  if (/\.(svg|png)$/i.test(file.name)) {
+    const source = /\.svg$/i.test(file.name)
+      ? extractSvgSource(await file.text())
+      : extractPngText(new Uint8Array(await file.arrayBuffer()), PNG_SOURCE_KEYWORD);
+    if (source === null) throw new NoEmbeddedSourceError(file.name);
+    return { name: `${base}.mmd`, text: source, lastModified: file.lastModified };
+  }
+  return { name: file.name, text: await file.text(), handle, lastModified: file.lastModified };
+}
 
 export interface OpenedFile {
   name: string;
@@ -32,19 +63,16 @@ export interface OpenedFile {
 export async function openFile(): Promise<OpenedFile | null> {
   if (canWriteBack) {
     try {
-      const [handle] = await pickerWindow.showOpenFilePicker!({ types: MERMAID_TYPES });
+      const [handle] = await pickerWindow.showOpenFilePicker!({ types: OPEN_TYPES });
       if (!handle) return null;
-      const file = await handle.getFile();
-      return { name: file.name, text: await file.text(), handle, lastModified: file.lastModified };
+      return await readDiagramFile(await handle.getFile(), handle);
     } catch (e) {
       if ((e as DOMException).name === 'AbortError') return null;
       throw e;
     }
   }
-  const [file] = await pickFiles('.mmd,.mermaid,.md,text/plain', false);
-  return file
-    ? { name: file.name, text: await file.text(), lastModified: file.lastModified }
-    : null;
+  const [file] = await pickFiles('.mmd,.mermaid,.md,.svg,.png,text/plain', false);
+  return file ? readDiagramFile(file) : null;
 }
 
 /** Writes to the handle, or asks for a location (or downloads) when there is none. */
@@ -98,6 +126,12 @@ export function download(blob: Blob, name: string) {
   a.download = name;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** Rasterizes an SVG to PNG at 2x and embeds the diagram source so the PNG can be reopened. */
+export async function svgToPngWithSource(svg: string, source: string): Promise<Blob> {
+  const png = new Uint8Array(await (await svgToPng(svg)).arrayBuffer());
+  return new Blob([embedPngText(png, PNG_SOURCE_KEYWORD, source)], { type: 'image/png' });
 }
 
 /** Rasterizes an SVG string to PNG at 2x for sharp output. */

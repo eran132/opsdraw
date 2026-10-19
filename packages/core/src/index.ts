@@ -6,8 +6,13 @@ export * from './cloudformation';
 export * from './kubernetes';
 export * from './compose';
 export * from './iac';
+export * from './clusterconfig';
+export * from './ansible';
+export * from './nomad';
 export * from './icons';
 export * from './layout';
+export * from './svg';
+export * from './png';
 
 import { parseArchitecture } from './mermaid';
 import { parseFlowchart } from './flowchart';

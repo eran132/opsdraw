@@ -7,7 +7,7 @@ const he: Messages = {
     open: 'פתיחה…',
     save: 'שמירה',
     saveAs: 'שמירה בשם…',
-    importTerraform: 'ייבוא Terraform…',
+    importIac: 'ייבוא תשתית…',
     exportSvg: 'ייצוא SVG',
     exportPng: 'ייצוא PNG',
     layoutRight: 'פריסה אוטומטית →',
@@ -66,6 +66,7 @@ const he: Messages = {
     reload: 'טעינה מחדש',
     keepMine: 'השארת הגרסה שלי',
     discardConfirm: 'לבטל את השינויים שלא נשמרו?',
+    noEmbeddedSource: 'בתמונה הזו אין תרשים OpsDraw מוטמע.',
   },
   packs: {
     title: 'חבילות אייקונים',

@@ -6,6 +6,7 @@ import {
   emptyDiagram,
   importIac,
   parseMermaid,
+  renderDiagramSvg,
   serializeArchitecture,
   type Diagram,
   type LayoutDirection,
@@ -15,16 +16,18 @@ import { Canvas, type Selection } from './Canvas';
 import { Editor } from './Editor';
 import { Inspector } from './Inspector';
 import { Palette } from './Palette';
-import { Preview, renderMermaid } from './Preview';
+import { Preview } from './Preview';
+import { resolveIcon } from './icons';
 import { PackDialog } from './PackDialog';
 import { LANGUAGES } from './i18n';
 import {
+  NoEmbeddedSourceError,
   download,
   openFile,
   pickFiles,
   readIfChanged,
   saveFile,
-  svgToPng,
+  svgToPngWithSource,
   type OpenedFile,
 } from './file';
 import { SAMPLE } from './sample';
@@ -137,7 +140,14 @@ export function App() {
 
   async function doOpen() {
     if (!confirmDiscard()) return;
-    const f = await openFile();
+    let f: OpenedFile | null;
+    try {
+      f = await openFile();
+    } catch (e) {
+      if (!(e instanceof NoEmbeddedSourceError)) throw e;
+      setStatus(t('file.noEmbeddedSource'));
+      return;
+    }
     if (!f) return;
     handle.current = f.handle;
     lastModified.current = f.lastModified;
@@ -169,7 +179,7 @@ export function App() {
   }
 
   async function doImportIac() {
-    const files = await pickFiles('.tf,.yaml,.yml,.json,.template', true);
+    const files = await pickFiles('.tf,.yaml,.yml,.json,.template,.ini,.nomad,.hcl', true);
     if (!files.length) return;
     const contents = await Promise.all(
       files.map(async (f) => ({ path: f.name, content: await f.text() })),
@@ -194,11 +204,16 @@ export function App() {
     setFitKey((k) => k + 1);
   }
 
+  /**
+   * Exports are drawn from the canvas geometry, so they match what you see (Mermaid's own
+   * renderer ignores stored positions). Both formats embed the source and can be reopened.
+   */
   async function doExport(kind: 'svg' | 'png') {
-    const svg = await renderMermaid(text);
     const base = fileName.replace(/\.(mmd|mermaid|md)$/i, '');
+    const theme = kind === 'svg' ? 'auto' : 'light';
+    const svg = renderDiagramSvg(diagram, { resolveIcon, theme });
     if (kind === 'svg') download(new Blob([svg], { type: 'image/svg+xml' }), `${base}.svg`);
-    else download(await svgToPng(svg), `${base}.png`);
+    else download(await svgToPngWithSource(svg, serializeArchitecture(diagram)), `${base}.png`);
   }
 
   const pickIcon = (icon: string) => {
@@ -253,7 +268,7 @@ export function App() {
           <button onClick={() => void doSave()}>{t('toolbar.save')}</button>
           <button onClick={() => void doSave(true)}>{t('toolbar.saveAs')}</button>
           <span className="sep" />
-          <button onClick={() => void doImportIac()}>{t('toolbar.importTerraform')}</button>
+          <button onClick={() => void doImportIac()}>{t('toolbar.importIac')}</button>
           <button onClick={() => void doLayout('RIGHT')}>{t('toolbar.layoutRight')}</button>
           <button onClick={() => void doLayout('DOWN')}>{t('toolbar.layoutDown')}</button>
           <span className="sep" />

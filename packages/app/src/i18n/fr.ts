@@ -7,7 +7,7 @@ const fr: Messages = {
     open: 'Ouvrir…',
     save: 'Enregistrer',
     saveAs: 'Enregistrer sous…',
-    importTerraform: 'Importer Terraform…',
+    importIac: 'Importer l’infrastructure…',
     exportSvg: 'Exporter en SVG',
     exportPng: 'Exporter en PNG',
     layoutRight: 'Disposition auto →',
@@ -67,6 +67,7 @@ const fr: Messages = {
     reload: 'Recharger',
     keepMine: 'Garder ma version',
     discardConfirm: 'Abandonner les modifications non enregistrées ?',
+    noEmbeddedSource: 'Cette image ne contient pas de diagramme OpsDraw intégré.',
   },
   packs: {
     title: "Packs d'icônes",

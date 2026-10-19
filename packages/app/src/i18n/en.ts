@@ -5,7 +5,7 @@ const en = {
     open: 'Open…',
     save: 'Save',
     saveAs: 'Save as…',
-    importTerraform: 'Import Terraform…',
+    importIac: 'Import infrastructure…',
     exportSvg: 'Export SVG',
     exportPng: 'Export PNG',
     layoutRight: 'Auto layout →',
@@ -64,6 +64,7 @@ const en = {
     reload: 'Reload',
     keepMine: 'Keep mine',
     discardConfirm: 'Discard unsaved changes?',
+    noEmbeddedSource: 'This image has no embedded OpsDraw diagram.',
   },
   packs: {
     title: 'Icon packs',

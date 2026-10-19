@@ -7,7 +7,7 @@ const zh: Messages = {
     open: '打开…',
     save: '保存',
     saveAs: '另存为…',
-    importTerraform: '导入 Terraform…',
+    importIac: '导入基础设施…',
     exportSvg: '导出 SVG',
     exportPng: '导出 PNG',
     layoutRight: '自动布局 →',
@@ -66,6 +66,7 @@ const zh: Messages = {
     reload: '重新加载',
     keepMine: '保留我的版本',
     discardConfirm: '放弃未保存的更改？',
+    noEmbeddedSource: '此图片中没有嵌入的 OpsDraw 图表。',
   },
   packs: {
     title: '图标包',

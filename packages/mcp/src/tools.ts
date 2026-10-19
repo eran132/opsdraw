@@ -59,7 +59,18 @@ export interface ToolContext {
 export const DIAGRAM_EXTENSIONS = ['.mmd', '.mermaid'] as const;
 export const TERRAFORM_EXTENSIONS = ['.tf'] as const;
 /** Terraform, CloudFormation (YAML/JSON/.template), Kubernetes manifests and Compose files. */
-export const IAC_EXTENSIONS = ['.tf', '.yaml', '.yml', '.json', '.template'] as const;
+export const IAC_EXTENSIONS = [
+  '.tf',
+  '.yaml',
+  '.yml',
+  '.json',
+  '.template',
+  '.ini',
+  '.nomad',
+  '.hcl',
+] as const;
+/** Ansible inventories are often extension-less files with these names. */
+export const IAC_BARE_NAMES = ['hosts', 'inventory'] as const;
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 const MAX_TF_FILES = 2000;
 const ICON_RE = /^[A-Za-z0-9_-]+(:[A-Za-z0-9_-]+)?$/;
@@ -556,8 +567,10 @@ async function collectSources(
   recursive: boolean,
   extensions: readonly string[],
   what: string,
+  bareNames: readonly string[] = [],
 ) {
   const abs = resolveSafe(ctx, source);
+  const isBare = (file: string) => bareNames.includes(path.basename(file).toLowerCase());
   let stat;
   try {
     stat = await fs.stat(abs);
@@ -566,13 +579,14 @@ async function collectSources(
   }
   const files: TerraformFile[] = [];
   const add = async (file: string) => {
-    resolveSafe(ctx, file, extensions);
+    resolveSafe(ctx, file, isBare(file) ? undefined : extensions);
     if (files.length >= MAX_TF_FILES) throw new ToolError(`More than ${MAX_TF_FILES} files`);
     files.push({ path: display(ctx, file), content: await readText(file, display(ctx, file)) });
   };
-  const wanted = (name: string) => extensions.some((ext) => name.toLowerCase().endsWith(ext));
+  const wanted = (name: string) =>
+    isBare(name) || extensions.some((ext) => name.toLowerCase().endsWith(ext));
   if (stat.isFile()) {
-    resolveSafe(ctx, source, extensions);
+    resolveSafe(ctx, source, isBare(source) ? undefined : extensions);
     await add(abs);
   } else if (stat.isDirectory()) {
     const walk = async (dir: string) => {
@@ -637,11 +651,12 @@ export async function importIacFiles(
     args.recursive ?? false,
     IAC_EXTENSIONS,
     'Infrastructure',
+    IAC_BARE_NAMES,
   );
   const { diagram: parsed, kinds, skipped } = importIac(files, { includeAll: args.includeAll });
   if (!kinds.length)
     throw new ToolError(
-      `None of the ${files.length} file(s) looked like Terraform, CloudFormation, Kubernetes or Compose`,
+      `None of the ${files.length} file(s) looked like Terraform, CloudFormation, Kubernetes, Compose, a cluster config, an Ansible inventory or a Nomad job`,
     );
   if (args.title?.trim()) parsed.title = args.title.trim().replace(/[\r\n]+/g, ' ');
   const diagram = await autoLayout(parsed, args.direction ?? 'RIGHT');
