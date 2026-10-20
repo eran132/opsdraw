@@ -120,7 +120,9 @@ export function PackDialog({ open, onClose }: { open: boolean; onClose(): void }
                 <span className="muted">
                   {t('packs.icons', { count: Object.keys(p.icons).length })}
                 </span>{' '}
-                <button onClick={() => void removePack(p.prefix)}>{t('packs.remove')}</button>
+                <button className="sm danger" onClick={() => void removePack(p.prefix)}>
+                  {t('packs.remove')}
+                </button>
               </li>
             ))}
           </ul>

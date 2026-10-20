@@ -16,8 +16,29 @@ async function setEditorText(page: Page, text: string) {
   await page.keyboard.insertText(text);
 }
 
+/** Opens an app bar menu (File, Export, ...) unless it is already open, and returns it. */
+async function openMenu(page: Page, name: string) {
+  const trigger = page.getByRole('button', { name, exact: true });
+  if ((await trigger.getAttribute('aria-expanded')) !== 'true') await trigger.click();
+  const menu = page.getByRole('menu', { name });
+  await expect(menu).toBeVisible();
+  return menu;
+}
+
+/** Runs a command from an app bar menu, e.g. File → Open…. */
+async function menuAction(page: Page, menu: string, item: string | RegExp) {
+  await (await openMenu(page, menu)).getByRole('menuitem', { name: item }).click();
+}
+
 const canvasNode = (page: Page, label: string) =>
   page.locator('.react-flow__node').filter({ hasText: label });
+
+/** Clicks a node and waits until it shows as selected, as a person would see before typing. */
+async function selectNode(page: Page, label: string) {
+  const node = canvasNode(page, label);
+  await node.click();
+  await expect(node).toHaveClass(/selected/);
+}
 
 test.beforeEach(async ({ page }) => {
   // Start in English unless a test switched language (survives reloads within a test).
@@ -27,6 +48,28 @@ test.beforeEach(async ({ page }) => {
 });
 
 test.describe('smoke', () => {
+  test('fits the whole diagram into the canvas at laptop size', async ({ page }) => {
+    // The desktop app opens at 1280x760, where the canvas pane is narrow.
+    await page.setViewportSize({ width: 1280, height: 760 });
+    await page.goto('/');
+    await expect(page.locator('.react-flow__node')).toHaveCount(9);
+    const pane = (await page.locator('.react-flow').boundingBox())!;
+    await expect
+      .poll(async () => {
+        const boxes = await page
+          .locator('.react-flow__node')
+          .evaluateAll((els) => els.map((el) => el.getBoundingClientRect().toJSON() as DOMRect));
+        return boxes.every(
+          (b) =>
+            b.left >= pane.x - 1 &&
+            b.top >= pane.y - 1 &&
+            b.right <= pane.x + pane.width + 1 &&
+            b.bottom <= pane.y + pane.height + 1,
+        );
+      })
+      .toBe(true);
+  });
+
   test('loads the sample diagram without errors', async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', (e) => errors.push(e.message));
@@ -85,7 +128,7 @@ test.describe('text and canvas stay in sync', () => {
   test('editing a label in the inspector rewrites the file', async ({ page }) => {
     await page.goto('/');
     await setEditorText(page, SIMPLE);
-    await canvasNode(page, 'Web').click();
+    await selectNode(page, 'Web');
     const label = page.locator('.inspector label', { hasText: 'Label' }).locator('input');
     await label.fill('Storefront');
     await expect(page.locator('.cm-content')).toContainText(
@@ -96,7 +139,7 @@ test.describe('text and canvas stay in sync', () => {
   test('deleting a node removes it and its connections', async ({ page }) => {
     await page.goto('/');
     await setEditorText(page, SIMPLE);
-    await canvasNode(page, 'Orders DB').click();
+    await selectNode(page, 'Orders DB');
     await page.keyboard.press('Delete');
     await expect(page.locator('.react-flow__node')).toHaveCount(2);
     // The editor syncs one render after the canvas, so use retrying assertions.
@@ -149,9 +192,9 @@ test.describe('mermaid compatibility', () => {
 });
 
 test.describe('export', () => {
-  async function readDownload(page: Page, button: string) {
+  async function readDownload(page: Page, item: string) {
     const download = page.waitForEvent('download');
-    await page.getByRole('button', { name: button }).click();
+    await menuAction(page, 'Export', item);
     const file = await download;
     const chunks: Buffer[] = [];
     for await (const chunk of await file.createReadStream()) chunks.push(chunk as Buffer);
@@ -206,7 +249,7 @@ test.describe('export', () => {
       await setEditorText(page, 'architecture-beta\n');
       page.once('dialog', (d) => void d.accept());
       const chooser = page.waitForEvent('filechooser');
-      await page.getByRole('button', { name: 'Open…' }).click();
+      await menuAction(page, 'File', 'Open…');
       await (await chooser).setFiles(f);
       await expect(page.locator('.react-flow__node')).toHaveCount(9);
       await expect(page.locator('.file-name')).toContainText('diagram.mmd');
@@ -224,7 +267,7 @@ test.describe('export', () => {
   test('images without an embedded diagram are refused politely', async ({ page }) => {
     await page.goto('/');
     const chooser = page.waitForEvent('filechooser');
-    await page.getByRole('button', { name: 'Open…' }).click();
+    await menuAction(page, 'File', 'Open…');
     await (
       await chooser
     ).setFiles({
@@ -241,7 +284,7 @@ test.describe('infrastructure as code', () => {
   test('imports Terraform into nested groups', async ({ page }) => {
     await page.goto('/');
     const chooser = page.waitForEvent('filechooser');
-    await page.getByRole('button', { name: /Import infrastructure/ }).click();
+    await menuAction(page, 'File', /Import infrastructure/);
     await (
       await chooser
     ).setFiles({
@@ -282,7 +325,11 @@ test.describe('internationalization', () => {
     const palette = (await page.locator('.palette').boundingBox())!;
     const inspector = (await page.locator('.inspector').boundingBox())!;
     expect(palette.x).toBeGreaterThan(inspector.x);
-    await expect(page.getByRole('button', { name: 'ייצוא SVG' })).toBeVisible();
+    // Menus are translated too.
+    const exportMenu = await openMenu(page, 'ייצוא');
+    await expect(exportMenu.getByRole('menuitem', { name: 'ייצוא SVG' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(exportMenu).toBeHidden();
     await page.reload();
     await expect(app).toHaveAttribute('dir', 'rtl');
     await page.getByRole('combobox', { name: 'שפה' }).selectOption('en');
@@ -347,7 +394,7 @@ const PLACED = `architecture-beta
 `;
 
 async function selectAllThree(page: Page) {
-  await canvasNode(page, 'Alpha').click();
+  await selectNode(page, 'Alpha');
   await canvasNode(page, 'Beta').click({ modifiers: ['Shift'] });
   await canvasNode(page, 'Gamma').click({ modifiers: ['Shift'] });
 }
@@ -417,7 +464,7 @@ test.describe('arranging nodes', () => {
     await page.goto('/');
     await setEditorText(page, PLACED);
     await expect(page.locator('.react-flow__node')).toHaveCount(3);
-    await canvasNode(page, 'Alpha').click();
+    await selectNode(page, 'Alpha');
     await page.keyboard.press('ArrowRight');
     await expect.poll(() => editorDoc(page)).toContain('%% @pos a 48 40');
     await page.keyboard.press('Shift+ArrowDown');
@@ -580,7 +627,7 @@ test.describe('colors and legend', () => {
     );
 
     // Several nodes at once.
-    await canvasNode(page, 'Web').click();
+    await selectNode(page, 'Web');
     await canvasNode(page, 'Orders DB').click({ modifiers: ['Shift'] });
     await expect(page.locator('.inspector h2')).toHaveText('2 selected');
     await page.locator('.inspector').getByRole('button', { name: 'Orange' }).click();
@@ -616,7 +663,7 @@ test.describe('colors and legend', () => {
     await expect(page.locator('.react-flow__node')).toHaveCount(3);
     const exportSvg = async () => {
       const download = page.waitForEvent('download');
-      await page.getByRole('button', { name: 'Export SVG' }).click();
+      await menuAction(page, 'Export', 'Export SVG');
       const file = await download;
       const chunks: Buffer[] = [];
       for await (const chunk of await file.createReadStream()) chunks.push(chunk as Buffer);
@@ -626,9 +673,13 @@ test.describe('colors and legend', () => {
     expect(plain).not.toContain('class="legend"');
     expect(plain).toContain('var(--pal-purple-stroke)');
 
-    const legend = page.getByRole('checkbox', { name: 'Legend' });
+    const legend = (await openMenu(page, 'Export')).getByRole('menuitemcheckbox', {
+      name: 'Legend',
+    });
     await expect(legend).not.toBeChecked();
-    await legend.check();
+    await legend.click();
+    // Check boxes keep the menu open, so several can be toggled.
+    await expect(legend).toBeChecked();
     const svg = await exportSvg();
     expect(svg).toContain('class="legend"');
     expect(svg).toContain('>Legend</text>');
@@ -661,7 +712,7 @@ test.describe('straight edges', () => {
     await setEditorText(page, KINKED);
     await expect(page.locator('.react-flow__node')).toHaveCount(3);
     await expect(page.locator('.react-flow__edge-routed')).toHaveCount(1);
-    await canvasNode(page, 'API').click();
+    await selectNode(page, 'API');
     await canvasNode(page, 'Queue').click({ modifiers: ['Shift'] });
     await page.getByRole('button', { name: 'Align middle' }).click();
     await expect.poll(() => editorDoc(page)).toContain('api:R -[enqueue]-> L:queue');
@@ -687,7 +738,7 @@ test.describe('duplicate, copy and paste', () => {
     await page.goto('/');
     await setEditorText(page, PLACED);
     await expect(page.locator('.react-flow__node')).toHaveCount(3);
-    await canvasNode(page, 'Alpha').click();
+    await selectNode(page, 'Alpha');
     await page.keyboard.press('ControlOrMeta+D');
     await expect.poll(() => editorDoc(page)).toContain('service a2(server)[Alpha]');
     expect(await editorDoc(page)).toContain('%% @pos a2 64 64');
@@ -720,7 +771,7 @@ test.describe('duplicate, copy and paste', () => {
     await page.goto('/');
     await setEditorText(page, PLACED);
     await expect(page.locator('.react-flow__node')).toHaveCount(3);
-    await canvasNode(page, 'Alpha').click();
+    await selectNode(page, 'Alpha');
     await page.keyboard.press('ControlOrMeta+C');
     await expect
       .poll(() => page.evaluate(() => navigator.clipboard.readText()))
@@ -748,7 +799,7 @@ test.describe('duplicate, copy and paste', () => {
     await page.goto('/');
     await setEditorText(page, PLACED);
     await expect(page.locator('.react-flow__node')).toHaveCount(3);
-    await canvasNode(page, 'Gamma').click();
+    await selectNode(page, 'Gamma');
     await page.keyboard.press('ControlOrMeta+C');
     await expect
       .poll(() => page.evaluate(() => navigator.clipboard.readText()))
@@ -765,7 +816,7 @@ test.describe('duplicate, copy and paste', () => {
     await page.goto('/');
     await setEditorText(page, PLACED);
     await expect(page.locator('.react-flow__node')).toHaveCount(3);
-    await canvasNode(page, 'Beta').click();
+    await selectNode(page, 'Beta');
     await page.keyboard.press('ControlOrMeta+X');
     await expect(page.locator('.react-flow__node')).toHaveCount(2);
     await expect.poll(() => editorDoc(page)).not.toContain('service b(');
@@ -793,5 +844,190 @@ test.describe('icon names', () => {
     // Searching in the UI language finds it too.
     await palette.getByRole('searchbox').fill('חומת אש');
     await expect(palette.locator('.tile').first()).toHaveAttribute('title', 'חומת אש');
+  });
+});
+
+test.describe('app bar, command palette and theme', () => {
+  test('File and Export menus work from the keyboard', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('.react-flow__node')).toHaveCount(9);
+    const file = page.getByRole('button', { name: 'File', exact: true });
+    await file.focus();
+    await page.keyboard.press('Enter');
+    const fileMenu = page.getByRole('menu', { name: 'File' });
+    await expect(fileMenu).toBeVisible();
+    await expect(file).toHaveAttribute('aria-expanded', 'true');
+    const items = fileMenu.getByRole('menuitem');
+    await expect(items).toHaveText(['New', /Open…/, /Save/, /Save as…/, 'Import infrastructure…']);
+    await expect(items.nth(0)).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(items.nth(1)).toBeFocused();
+    await page.keyboard.press('End');
+    await expect(items.nth(4)).toBeFocused();
+    // Wraps around, and Home goes back to the top.
+    await page.keyboard.press('ArrowDown');
+    await expect(items.nth(0)).toBeFocused();
+    await page.keyboard.press('ArrowUp');
+    await expect(items.nth(4)).toBeFocused();
+    await page.keyboard.press('Home');
+    await expect(items.nth(0)).toBeFocused();
+    // A letter jumps to the next item starting with it.
+    await page.keyboard.press('s');
+    await expect(items.nth(2)).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(fileMenu).toBeHidden();
+    await expect(file).toBeFocused();
+    await expect(file).toHaveAttribute('aria-expanded', 'false');
+
+    // Arrow Up opens on the last item; Space toggles a check box and keeps the menu open.
+    const exportButton = page.getByRole('button', { name: 'Export', exact: true });
+    await exportButton.focus();
+    await page.keyboard.press('ArrowUp');
+    const legend = page.getByRole('menuitemcheckbox', { name: 'Legend' });
+    await expect(legend).toBeFocused();
+    await expect(legend).not.toBeChecked();
+    await page.keyboard.press(' ');
+    await expect(legend).toBeChecked();
+    // Enter on an item runs it and closes the menu.
+    await page.keyboard.press('Home');
+    const download = page.waitForEvent('download');
+    await page.keyboard.press('Enter');
+    expect((await download).suggestedFilename()).toBe('untitled.svg');
+    await expect(page.getByRole('menu')).toHaveCount(0);
+    await expect(exportButton).toBeFocused();
+
+    // A click outside closes an open menu.
+    await exportButton.click();
+    await expect(page.getByRole('menu', { name: 'Export' })).toBeVisible();
+    await page.locator('.statusbar').click();
+    await expect(page.getByRole('menu')).toHaveCount(0);
+  });
+
+  test('menus open toward the inside edge in right-to-left layouts', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('combobox', { name: 'Language' }).selectOption('he');
+    const trigger = page.getByRole('button', { name: 'קובץ', exact: true });
+    await trigger.click();
+    const menu = (await page.getByRole('menu', { name: 'קובץ' }).boundingBox())!;
+    const button = (await trigger.boundingBox())!;
+    // Lined up with the trigger's right edge, so it opens leftwards, into the window.
+    expect(Math.abs(menu.x + menu.width - (button.x + button.width))).toBeLessThan(2);
+    expect(menu.x).toBeGreaterThan(0);
+  });
+
+  test('Ctrl+K opens the command palette; "export svg" + Enter downloads the SVG', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await expect(page.locator('.cm-content')).toContainText('%% @pos api');
+    await page.locator('.statusbar').click();
+    await page.keyboard.press('ControlOrMeta+K');
+    const dialog = page.getByRole('dialog', { name: 'Command palette' });
+    await expect(dialog).toBeVisible();
+    const input = dialog.getByRole('combobox');
+    await expect(input).toBeFocused();
+    await input.fill('export svg');
+    const first = dialog.getByRole('option').first();
+    await expect(first).toHaveText('Export SVG');
+    await expect(first).toHaveAttribute('aria-selected', 'true');
+    await expect(input).toHaveAttribute('aria-activedescendant', (await first.getAttribute('id'))!);
+    const download = page.waitForEvent('download');
+    await page.keyboard.press('Enter');
+    const file = await download;
+    expect(file.suggestedFilename()).toBe('untitled.svg');
+    await expect(dialog).toBeHidden();
+
+    // Escape closes it without running anything.
+    await page.keyboard.press('ControlOrMeta+K');
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+  });
+
+  test('the command palette is fuzzy and adds palette icons to the canvas', async ({ page }) => {
+    await page.goto('/');
+    await setEditorText(page, SIMPLE);
+    await expect(page.locator('.react-flow__node')).toHaveCount(3);
+    await page.locator('.statusbar').click();
+    await page.keyboard.press('ControlOrMeta+K');
+    const dialog = page.getByRole('dialog', { name: 'Command palette' });
+    const input = dialog.getByRole('combobox');
+    // Letters in order match too ("fwl" finds Firewall).
+    await input.fill('add fwl');
+    await expect(dialog.getByRole('option').first()).toHaveText('Add Firewall');
+    await page.keyboard.press('Enter');
+    await expect(page.locator('.react-flow__node')).toHaveCount(4);
+    await expect(page.locator('.cm-content')).toContainText('service firewall(lucide:brick-wall)');
+    await expect(page.locator('.react-flow__node.selected')).toHaveAttribute('data-id', 'firewall');
+
+    // Arrow keys move the active option.
+    await page.keyboard.press('ControlOrMeta+K');
+    await input.fill('auto layout');
+    const options = dialog.getByRole('option');
+    await expect(options).toHaveCount(2);
+    await page.keyboard.press('ArrowDown');
+    await expect(options.nth(1)).toHaveAttribute('aria-selected', 'true');
+    await page.keyboard.press('ArrowDown');
+    await expect(options.nth(0)).toHaveAttribute('aria-selected', 'true');
+    await input.fill('zzzzqqq');
+    await expect(dialog).toContainText('No matching commands');
+  });
+
+  test('the theme choice switches to dark mode and survives a reload', async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.goto('/');
+    const html = page.locator('html');
+    const background = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    const light = await background();
+    await expect(html).not.toHaveAttribute('data-theme');
+
+    await page.getByRole('button', { name: 'Theme' }).click();
+    await page.getByRole('menuitemradio', { name: 'Dark' }).click();
+    await expect(html).toHaveAttribute('data-theme', 'dark');
+    const dark = await background();
+    expect(dark).not.toBe(light);
+    // The body really is dark: low lightness in OKLCH.
+    expect(Number(/oklch\(([\d.]+)/.exec(dark)?.[1] ?? 1)).toBeLessThan(0.3);
+    await expect(page.locator('.react-flow')).toHaveClass(/dark/);
+
+    await page.reload();
+    await expect(html).toHaveAttribute('data-theme', 'dark');
+    expect(await background()).toBe(dark);
+    await page.getByRole('button', { name: 'Theme' }).click();
+    await expect(page.getByRole('menuitemradio', { name: 'Dark' })).toBeChecked();
+
+    // "System" follows the operating system again.
+    await page.getByRole('menuitemradio', { name: 'System' }).click();
+    await expect(html).not.toHaveAttribute('data-theme');
+    expect(await background()).toBe(light);
+    await page.emulateMedia({ colorScheme: 'dark' });
+    expect(await background()).toBe(dark);
+  });
+
+  test('keyboard focus shows a visible focus ring, mouse clicks do not', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('.react-flow__node')).toHaveCount(9);
+    const file = page.getByRole('button', { name: 'File', exact: true });
+    const ring = () =>
+      file.evaluate((el) => {
+        const s = getComputedStyle(el);
+        return { style: s.outlineStyle, width: s.outlineWidth, color: s.outlineColor };
+      });
+
+    // Open and close the menu with the mouse: the button gets focus back, without a ring.
+    await file.click();
+    await expect(page.getByRole('menu', { name: 'File' })).toBeVisible();
+    await file.click();
+    await expect(page.getByRole('menu')).toHaveCount(0);
+    await expect(file).toBeFocused();
+    expect((await ring()).style).toBe('none');
+
+    // Tabbing to it from the brand (the element before it) shows the ring.
+    await page.locator('.brand').click();
+    await page.keyboard.press('Tab');
+    await expect(file).toBeFocused();
+    const focused = await ring();
+    expect(focused.style).toBe('solid');
+    expect(focused.width).toBe('2px');
   });
 });

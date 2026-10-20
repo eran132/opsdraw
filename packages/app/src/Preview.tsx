@@ -4,12 +4,12 @@ import { useTranslation } from 'react-i18next';
 import type { Diagram } from '@opsdraw/core';
 import { usePacksVersion } from './Icon';
 import { builtinFor, isPrefixedIcon, toBuiltinIcons } from './builtinIcons';
+import { getTheme, useTheme } from './theme';
 
 let counter = 0;
 
-export function initMermaid() {
-  const dark =
-    typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches;
+/** Sets up Mermaid in the current light or dark theme; call again when the theme changes. */
+export function initMermaid(dark = getTheme().resolved === 'dark') {
   mermaid.initialize({
     startOnLoad: false,
     securityLevel: 'strict',
@@ -36,12 +36,14 @@ export function Preview({
 }) {
   const { t } = useTranslation();
   const packs = usePacksVersion();
+  const theme = useTheme().resolved;
   const [svg, setSvg] = useState('');
   const [error, setError] = useState('');
   const latest = useRef(0);
 
   useEffect(() => {
     const run = ++latest.current;
+    initMermaid(theme === 'dark');
     const t = setTimeout(() => {
       renderMermaid(text).then(
         (out) => {
@@ -53,7 +55,7 @@ export function Preview({
       );
     }, 250);
     return () => clearTimeout(t);
-  }, [text, packs]);
+  }, [text, packs, theme]);
 
   const packIcons = diagram?.nodes.filter((n) => isPrefixedIcon(n.icon)) ?? [];
   const mappable = packIcons.filter((n) => builtinFor(n.icon)).length;
@@ -63,7 +65,11 @@ export function Preview({
       {diagram && packIcons.length > 0 && (
         <div className="banner info" role="note" data-testid="github-icons-hint">
           <span>{t('preview.githubIcons')}</span>
-          <button disabled={!mappable} onClick={() => onChange(toBuiltinIcons(diagram).diagram)}>
+          <button
+            className="sm"
+            disabled={!mappable}
+            onClick={() => onChange(toBuiltinIcons(diagram).diagram)}
+          >
             {t('preview.useBuiltins')}
           </button>
         </div>

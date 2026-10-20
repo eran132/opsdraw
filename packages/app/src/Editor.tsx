@@ -2,6 +2,7 @@ import CodeMirror from '@uiw/react-codemirror';
 import { EditorView } from '@codemirror/view';
 import { useTranslation } from 'react-i18next';
 import type { ParseError } from '@opsdraw/core';
+import { useTheme } from './theme';
 
 interface Props {
   text: string;
@@ -15,13 +16,12 @@ interface Props {
 
 const theme = EditorView.theme({
   '&': { height: '100%', fontSize: '13px' },
-  '.cm-scroller': { fontFamily: 'ui-monospace, SFMono-Regular, Consolas, monospace' },
+  '.cm-scroller': { fontFamily: 'var(--font-mono)' },
 });
 
 export function Editor({ text, errors, onChange, onBlur, isFlowchart, onConvert }: Props) {
   const { t } = useTranslation();
-  const dark =
-    typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches;
+  const dark = useTheme().resolved === 'dark';
   return (
     <section className="editor" aria-label="Mermaid">
       {/* Code is always left-to-right, even in RTL UI languages. */}
@@ -38,7 +38,9 @@ export function Editor({ text, errors, onChange, onBlur, isFlowchart, onConvert 
       {isFlowchart && (
         <div className="banner">
           <span>{t('editor.flowchartDetected')}</span>
-          <button onClick={onConvert}>{t('editor.convert')}</button>
+          <button className="primary sm" onClick={onConvert}>
+            {t('editor.convert')}
+          </button>
         </div>
       )}
       {errors.length > 0 && !isFlowchart && (

@@ -1,13 +1,18 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ReactFlowProvider } from '@xyflow/react';
+import { ReactFlowProvider, useReactFlow } from '@xyflow/react';
 import {
+  GENERIC_CATALOG,
+  SERVICE_SIZE,
+  catalogEntry,
   emptyDiagram,
   importIac,
+  makeId,
   parseMermaid,
   renderDiagramSvg,
   repickMovedSides,
   serializeArchitecture,
+  type ArchNode,
   type Diagram,
   type LayoutDirection,
   type ParseError,
@@ -15,12 +20,17 @@ import {
 import { Canvas, type Selection } from './Canvas';
 import { Editor } from './Editor';
 import { Inspector } from './Inspector';
-import { Palette } from './Palette';
+import { Palette, useIconTitle } from './Palette';
 import { Preview } from './Preview';
-import { resolveIcon } from './icons';
+import { resolveIcon, searchIcons } from './icons';
 import { layoutDiagram } from './layout';
 import { PackDialog } from './PackDialog';
 import { LANGUAGES, isRtlLanguage } from './i18n';
+import { AppBar, THEME_ICONS } from './AppBar';
+import { CommandPalette, type Command } from './CommandPalette';
+import { shortcut } from './Menu';
+import { UiIcon } from './Icon';
+import { THEME_PREFERENCES, setThemePreference, useTheme } from './theme';
 import {
   NoEmbeddedSourceError,
   download,
@@ -54,6 +64,9 @@ export function App() {
   const [diskVersion, setDiskVersion] = useState<OpenedFile | null>(null);
   const [status, setStatus] = useState('');
   const [legend, setLegend] = useState(false);
+  const [commandsOpen, setCommandsOpen] = useState(false);
+  /** Center of the visible canvas in diagram coordinates, when the canvas is shown. */
+  const viewCenter = useRef<() => { x: number; y: number } | null>(() => null);
   const handle = useRef<Handle>(undefined);
   const lastModified = useRef(0);
   const undo = useRef<string[]>([]);
@@ -296,13 +309,184 @@ export function App() {
     });
   };
 
+  /** Adds a service with this icon in the middle of the visible canvas and selects it. */
+  function addIcon(icon: string, label: string) {
+    const current = flushParse() ?? diagramRef.current;
+    const id = makeId(
+      label.toLowerCase(),
+      current.nodes.map((n) => n.id),
+    );
+    const node: ArchNode = { id, kind: 'service', label, icon };
+    const center = viewCenter.current();
+    const snap = (v: number) => Math.round(v / 8) * 8;
+    const layout = center
+      ? {
+          ...current.layout,
+          [id]: { x: snap(center.x - SERVICE_SIZE.w / 2), y: snap(center.y - SERVICE_SIZE.h / 2) },
+        }
+      : current.layout;
+    editDiagram({ ...current, nodes: [...current.nodes, node], layout });
+    setSelection({ type: 'node', id });
+  }
+
+  const titleOf = useIconTitle();
+  const addGroup = t('commands.groupAdd');
+  const addCommand = (ref: string, keywords = ''): Command => ({
+    id: `add:${ref}`,
+    label: t('commands.addIcon', { name: titleOf(ref) }),
+    group: addGroup,
+    iconRef: ref,
+    keywords: `add ${ref} ${keywords}`,
+    run: () => addIcon(ref, titleOf(ref)),
+  });
+
+  const actions = t('commands.groupActions');
+  const settings = t('commands.groupSettings');
+  const theme = useTheme();
+  const commands: Command[] = [
+    { id: 'new', label: t('toolbar.new'), group: actions, icon: 'file-plus', run: doNew },
+    {
+      id: 'open',
+      label: t('toolbar.open'),
+      group: actions,
+      icon: 'folder-open',
+      shortcut: shortcut('Ctrl+O'),
+      run: () => void doOpen(),
+    },
+    {
+      id: 'save',
+      label: t('toolbar.save'),
+      group: actions,
+      icon: 'save',
+      shortcut: shortcut('Ctrl+S'),
+      run: () => void doSave(),
+    },
+    {
+      id: 'save-as',
+      label: t('toolbar.saveAs'),
+      group: actions,
+      icon: 'save-all',
+      shortcut: shortcut('Ctrl+Shift+S'),
+      run: () => void doSave(true),
+    },
+    {
+      id: 'import-iac',
+      label: t('toolbar.importIac'),
+      group: actions,
+      icon: 'import',
+      keywords: 'terraform kubernetes compose cloudformation',
+      run: () => void doImportIac(),
+    },
+    {
+      id: 'export-svg',
+      label: t('toolbar.exportSvg'),
+      group: actions,
+      icon: 'file-code',
+      keywords: 'export svg',
+      run: () => void doExport('svg'),
+    },
+    {
+      id: 'export-png',
+      label: t('toolbar.exportPng'),
+      group: actions,
+      icon: 'file-image',
+      keywords: 'export png',
+      run: () => void doExport('png'),
+    },
+    {
+      id: 'legend',
+      label: legend ? t('commands.legendOff') : t('commands.legendOn'),
+      group: actions,
+      icon: 'list',
+      keywords: 'legend',
+      run: () => setLegend(!legend),
+    },
+    {
+      id: 'layout-right',
+      label: t('toolbar.layoutRight'),
+      group: actions,
+      icon: 'arrow-right-from-line',
+      keywords: 'auto layout',
+      run: () => void doLayout('RIGHT'),
+    },
+    {
+      id: 'layout-down',
+      label: t('toolbar.layoutDown'),
+      group: actions,
+      icon: 'arrow-down-from-line',
+      keywords: 'auto layout',
+      run: () => void doLayout('DOWN'),
+    },
+    {
+      id: 'view-canvas',
+      label: t('commands.showView', { name: t('view.canvas') }),
+      group: actions,
+      icon: 'layout-grid',
+      keywords: 'canvas',
+      run: () => setView('canvas'),
+    },
+    {
+      id: 'view-preview',
+      label: t('commands.showView', { name: t('view.preview') }),
+      group: actions,
+      icon: 'scan-search',
+      keywords: 'mermaid preview',
+      run: () => setView('preview'),
+    },
+    {
+      id: 'icon-packs',
+      label: t('toolbar.iconPacks'),
+      group: settings,
+      icon: 'package',
+      keywords: 'icon packs aws azure gcp',
+      run: () => setPacksOpen(true),
+    },
+    {
+      id: 'theme-toggle',
+      label: t('commands.toggleTheme'),
+      group: settings,
+      icon: 'sun-moon',
+      keywords: 'theme dark light mode',
+      run: () => setThemePreference(theme.resolved === 'dark' ? 'light' : 'dark'),
+    },
+    ...THEME_PREFERENCES.map((pref): Command => ({
+      id: `theme-${pref}`,
+      label: `${t('theme.label')}: ${t(`theme.${pref}`)}`,
+      group: settings,
+      icon: THEME_ICONS[pref],
+      keywords: `theme ${pref}`,
+      run: () => setThemePreference(pref),
+    })),
+    ...LANGUAGES.map((l): Command => ({
+      id: `lang-${l.code}`,
+      label: `${t('toolbar.language')}: ${l.name}`,
+      group: settings,
+      icon: 'languages',
+      keywords: `language ${l.code}`,
+      run: () => void i18n.changeLanguage(l.code),
+    })),
+    ...GENERIC_CATALOG.flatMap((cat) => cat.icons.map((i) => addCommand(i.ref, i.title))),
+  ];
+  /** Icons outside the curated set are offered once the user types. */
+  const searchCommands = useMemo(
+    () => (query: string) =>
+      searchIcons(query.replace(/^\s*add\s+/i, ''), 30, titleOf)
+        .filter((hit) => !catalogEntry(hit.ref))
+        .map((hit) => addCommand(hit.ref)),
+    // addCommand only closes over t (through titleOf) and stable refs and setters.
+    [titleOf],
+  );
+
   // Shortcuts. Undo/redo here covers canvas edits; the code editor keeps its own history.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey;
       if (!mod) return;
       const key = e.key.toLowerCase();
-      if (key === 's') {
+      if (key === 'k' && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        setCommandsOpen((open) => !open);
+      } else if (key === 's') {
         e.preventDefault();
         void doSave(e.shiftKey);
       } else if (key === 'o') {
@@ -327,47 +511,26 @@ export function App() {
   return (
     // Direction and language live on the app root, not <html>, so the editor can be embedded.
     <div className="app" dir={isRtlLanguage(i18n.language) ? 'rtl' : 'ltr'} lang={i18n.language}>
-      <header className="toolbar">
-        <div className="brand">
-          <img src="./favicon.svg" alt="" width={22} height={22} />
-          <strong>OpsDraw</strong>
-          <span className="muted small">{t('app.tagline')}</span>
-        </div>
-        <div className="actions">
-          <button onClick={doNew}>{t('toolbar.new')}</button>
-          <button onClick={() => void doOpen()}>{t('toolbar.open')}</button>
-          <button onClick={() => void doSave()}>{t('toolbar.save')}</button>
-          <button onClick={() => void doSave(true)}>{t('toolbar.saveAs')}</button>
-          <span className="sep" />
-          <button onClick={() => void doImportIac()}>{t('toolbar.importIac')}</button>
-          <button onClick={() => void doLayout('RIGHT')}>{t('toolbar.layoutRight')}</button>
-          <button onClick={() => void doLayout('DOWN')}>{t('toolbar.layoutDown')}</button>
-          <span className="sep" />
-          <button onClick={() => void doExport('svg')}>{t('toolbar.exportSvg')}</button>
-          <button onClick={() => void doExport('png')}>{t('toolbar.exportPng')}</button>
-          <label className="check" title={t('toolbar.legendHint')}>
-            <input type="checkbox" checked={legend} onChange={(e) => setLegend(e.target.checked)} />
-            {t('toolbar.legend')}
-          </label>
-          <button onClick={() => setPacksOpen(true)}>{t('toolbar.iconPacks')}</button>
-          <select
-            aria-label={t('toolbar.language')}
-            value={i18n.language}
-            onChange={(e) => void i18n.changeLanguage(e.target.value)}
-          >
-            {LANGUAGES.map((l) => (
-              <option key={l.code} value={l.code}>
-                {l.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      </header>
+      <AppBar
+        fileName={fileName}
+        dirty={dirty}
+        legend={legend}
+        onLegend={setLegend}
+        onNew={doNew}
+        onOpen={() => void doOpen()}
+        onSave={(as) => void doSave(as)}
+        onImportIac={() => void doImportIac()}
+        onExport={(kind) => void doExport(kind)}
+        onLayout={(direction) => void doLayout(direction)}
+        onIconPacks={() => setPacksOpen(true)}
+        onCommands={() => setCommandsOpen(true)}
+      />
 
       {diskVersion && (
         <div className="banner">
           <span>{t('file.changedOnDisk')}</span>
           <button
+            className="primary sm"
             onClick={() => {
               setSavedText(diskVersion.text);
               void loadText(diskVersion.text, { fit: false });
@@ -376,7 +539,9 @@ export function App() {
           >
             {t('file.reload')}
           </button>
-          <button onClick={() => setDiskVersion(null)}>{t('file.keepMine')}</button>
+          <button className="sm" onClick={() => setDiskVersion(null)}>
+            {t('file.keepMine')}
+          </button>
         </div>
       )}
 
@@ -393,25 +558,8 @@ export function App() {
             onConvert={() => void doConvert()}
           />
           <section className="stage">
-            <div className="tabs" role="tablist">
-              <button
-                role="tab"
-                aria-selected={view === 'canvas'}
-                onClick={() => setView('canvas')}
-              >
-                {t('view.canvas')}
-              </button>
-              <button
-                role="tab"
-                aria-selected={view === 'preview'}
-                onClick={() => setView('preview')}
-              >
-                {t('view.preview')}
-              </button>
-              <span className="file-name" dir="auto">
-                {fileName}
-                {dirty && <span className="muted"> • {t('file.unsaved')}</span>}
-              </span>
+            <div className="stage-bar">
+              <ViewTabs view={view} onView={setView} />
             </div>
             {view === 'canvas' ? (
               <Canvas
@@ -438,6 +586,7 @@ export function App() {
             focusLabel={focusLabel}
           />
         </main>
+        <ViewCenter target={viewCenter} />
       </ReactFlowProvider>
       <footer className="statusbar">
         <span role="status">{status}</span>
@@ -447,6 +596,75 @@ export function App() {
         </span>
       </footer>
       <PackDialog open={packsOpen} onClose={() => setPacksOpen(false)} />
+      {commandsOpen && (
+        <CommandPalette
+          onClose={() => setCommandsOpen(false)}
+          commands={commands}
+          extra={searchCommands}
+        />
+      )}
     </div>
   );
+}
+
+type View = 'canvas' | 'preview';
+const VIEWS: View[] = ['canvas', 'preview'];
+
+/** Canvas / Mermaid preview as a segmented control (APG tabs: arrows move and select). */
+function ViewTabs({ view, onView }: { view: View; onView(v: View): void }) {
+  const { t } = useTranslation();
+  const refs = useRef<Record<View, HTMLButtonElement | null>>({ canvas: null, preview: null });
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    const rtl = (e.currentTarget as HTMLElement).closest('[dir=rtl]') !== null;
+    const forward = rtl ? 'ArrowLeft' : 'ArrowRight';
+    const back = rtl ? 'ArrowRight' : 'ArrowLeft';
+    const i = VIEWS.indexOf(view);
+    let next: View | undefined;
+    if (e.key === forward) next = VIEWS[(i + 1) % VIEWS.length];
+    else if (e.key === back) next = VIEWS[(i - 1 + VIEWS.length) % VIEWS.length];
+    else if (e.key === 'Home') next = VIEWS[0];
+    else if (e.key === 'End') next = VIEWS[VIEWS.length - 1];
+    if (!next) return;
+    e.preventDefault();
+    onView(next);
+    refs.current[next]?.focus();
+  };
+  return (
+    <div className="segmented tabs" role="tablist" aria-label={t('view.label')}>
+      {VIEWS.map((v) => (
+        <button
+          key={v}
+          ref={(el) => {
+            refs.current[v] = el;
+          }}
+          role="tab"
+          aria-selected={view === v}
+          tabIndex={view === v ? 0 : -1}
+          onClick={() => onView(v)}
+          onKeyDown={onKeyDown}
+        >
+          <UiIcon name={v === 'canvas' ? 'layout-grid' : 'scan-search'} />
+          {t(v === 'canvas' ? 'view.canvas' : 'view.preview')}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Lets the app place new nodes in the middle of what the canvas currently shows. */
+function ViewCenter({
+  target,
+}: {
+  target: React.RefObject<() => { x: number; y: number } | null>;
+}) {
+  const rf = useReactFlow();
+  useEffect(() => {
+    target.current = () => {
+      const pane = document.querySelector('.canvas');
+      if (!pane) return null;
+      const r = pane.getBoundingClientRect();
+      return rf.screenToFlowPosition({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
+    };
+  }, [rf, target]);
+  return null;
 }

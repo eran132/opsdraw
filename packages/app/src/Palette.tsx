@@ -48,18 +48,23 @@ function Tile({
   );
 }
 
-export function Palette({ onPick }: Props) {
+/** Curated icons have a translated name ("Firewall"); others are named after the icon. */
+export function useIconTitle() {
   const { t } = useTranslation();
-  const [query, setQuery] = useState('');
-  usePacksVersion();
-  /** Curated icons have a translated name ("Firewall"); others are named after the icon. */
-  const titleOf = useCallback(
+  return useCallback(
     (ref: string) => {
       const entry = catalogEntry(ref);
       return entry ? t(`icons.${catalogKey(ref)}`, { defaultValue: entry.title }) : humanize(ref);
     },
     [t],
   );
+}
+
+export function Palette({ onPick }: Props) {
+  const { t } = useTranslation();
+  const [query, setQuery] = useState('');
+  usePacksVersion();
+  const titleOf = useIconTitle();
   const hits = useMemo(() => searchIcons(query, 60, titleOf), [query, titleOf]);
   const packs = installedPacks();
 

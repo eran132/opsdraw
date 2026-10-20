@@ -27,6 +27,7 @@ import {
 } from '@opsdraw/core';
 import { CanvasActionsContext, nodeTypes, type ArchFlowNode } from './nodes';
 import { edgeTypes } from './edges';
+import { useTheme } from './theme';
 import { copySelection, cutSelection, duplicateSelection, pasteClipboard } from './clipboard';
 
 export type Selection =
@@ -125,9 +126,18 @@ function toFlowEdges(d: Diagram, selectedIndex: number | null): Edge[] {
   }));
 }
 
+/** The parts of a keyboard event the canvas uses; satisfied by React and DOM events alike. */
+type CanvasKeyEvent = Pick<
+  KeyboardEvent,
+  'key' | 'ctrlKey' | 'metaKey' | 'altKey' | 'shiftKey' | 'preventDefault'
+> & { target: EventTarget | null };
+
 export function Canvas({ diagram, onChange, selection, onSelect, fitKey, onEditLabel }: Props) {
   const rf = useReactFlow<ArchFlowNode>();
+  const theme = useTheme().resolved;
   const selectedKey = selectedNodeIds(selection).join('\n');
+  const selectionRef = useRef(selection);
+  selectionRef.current = selection;
   const selectedEdge = selection?.type === 'edge' ? selection.index : null;
   const [nodes, setNodes] = useState<ArchFlowNode[]>(() =>
     toFlowNodes(diagram, new Set(selectedNodeIds(selection))),
@@ -143,11 +153,47 @@ export function Canvas({ diagram, onChange, selection, onSelect, fitKey, onEditL
     setNodes(toFlowNodes(diagram, new Set(selectedKey ? selectedKey.split('\n') : [])));
   }, [diagram, selectedKey]);
 
+  // Fit the view to a newly loaded diagram. Node sizes, the startup layout and the panel widths
+  // settle over several renders, so keep re-fitting for a short while, and again whenever the
+  // canvas is resized, until the user pans, zooms or drags something themselves.
+  const fitting = useRef(true);
+  const userMoved = useRef(false);
+  const fit = useCallback(() => void rf.fitView({ padding: 0.15 }), [rf]);
+
   useEffect(() => {
-    // Let the canvas measure the new nodes first.
-    const t = setTimeout(() => void rf.fitView({ padding: 0.15, duration: 200 }), 50);
+    fitting.current = true;
+    userMoved.current = false;
+    const stop = setTimeout(() => (fitting.current = false), 1500);
+    return () => clearTimeout(stop);
+  }, [fitKey]);
+
+  useEffect(() => {
+    if (!fitting.current) return;
+    // Re-check when the timer fires: the user may have started interacting in the meantime.
+    const t = setTimeout(() => fitting.current && fit(), 60);
     return () => clearTimeout(t);
-  }, [fitKey, rf]);
+  }, [nodes, fitKey, fit]);
+
+  useEffect(() => {
+    const el = container.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const observer = new ResizeObserver(() => {
+      if (userMoved.current) return;
+      clearTimeout(t);
+      t = setTimeout(() => !userMoved.current && fit(), 60);
+    });
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      clearTimeout(t);
+    };
+  }, [fit]);
+
+  const onUserMove = useCallback(() => {
+    fitting.current = false;
+    userMoved.current = true;
+  }, []);
 
   const onNodesChange = useCallback(
     (changes: NodeChange<ArchFlowNode>[]) => setNodes((ns) => applyNodeChanges(changes, ns)),
@@ -353,7 +399,9 @@ export function Canvas({ diagram, onChange, selection, onSelect, fitKey, onEditL
   const clipboardAction = useCallback(
     async (key: 'd' | 'c' | 'x' | 'v') => {
       const d = diagramRef.current;
-      const ids = nodesRef.current.filter((n) => n.selected).map((n) => n.id);
+      let ids = nodesRef.current.filter((n) => n.selected).map((n) => n.id);
+      // A shortcut pressed right after a click can arrive before the canvas state re-renders.
+      if (!ids.length) ids = selectedNodeIds(selectionRef.current);
       if (key === 'd') {
         if (!ids.length) return;
         const out = duplicateSelection(d, ids);
@@ -388,7 +436,7 @@ export function Canvas({ diagram, onChange, selection, onSelect, fitKey, onEditL
   );
 
   const onKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
+    (e: CanvasKeyEvent) => {
       const target = e.target as HTMLElement;
       if (target.closest('input, textarea, select, [contenteditable="true"]')) return;
       const dir = ARROWS[e.key];
@@ -438,6 +486,23 @@ export function Canvas({ diagram, onChange, selection, onSelect, fitKey, onEditL
     [clipboardAction, commitNudge],
   );
 
+  // A re-render can replace the focused node's element, dropping focus to <body>. Keys pressed
+  // then would reach nothing, so route them to the canvas while it has a selection or the
+  // pointer is over it. Inputs and the code editor keep their own keys (focus is not on body).
+  useEffect(() => {
+    const onWindowKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
+      const active = document.activeElement;
+      if (active && active !== document.body) return;
+      const hasSelection = nodesRef.current.some((n) => n.selected);
+      if (!hasSelection && !pointer.current) return;
+      onKeyDown(e);
+      if (e.defaultPrevented) container.current?.focus({ preventScroll: true });
+    };
+    window.addEventListener('keydown', onWindowKey);
+    return () => window.removeEventListener('keydown', onWindowKey);
+  }, [onKeyDown]);
+
   return (
     <CanvasActionsContext.Provider value={actions}>
       <div
@@ -462,6 +527,11 @@ export function Canvas({ diagram, onChange, selection, onSelect, fitKey, onEditL
         }}
         onDragOver={(e) => e.preventDefault()}
         onDrop={onDrop}
+        // Any interaction with the canvas (click, key, drop) ends automatic fitting, so pasting
+        // or adding a node right after a load never moves the view under the user.
+        onPointerDownCapture={onUserMove}
+        onKeyDownCapture={onUserMove}
+        onDropCapture={onUserMove}
       >
         <ReactFlow<ArchFlowNode>
           nodes={nodes}
@@ -470,6 +540,9 @@ export function Canvas({ diagram, onChange, selection, onSelect, fitKey, onEditL
           edgeTypes={edgeTypes}
           onNodesChange={onNodesChange}
           onNodeDragStop={onNodeDragStop}
+          onNodeDragStart={onUserMove}
+          // Only user gestures carry an event; programmatic fitView calls don't.
+          onMoveStart={(event) => event && onUserMove()}
           onConnect={onConnect}
           onDelete={onDelete}
           onSelectionChange={onSelectionChange}
@@ -480,15 +553,17 @@ export function Canvas({ diagram, onChange, selection, onSelect, fitKey, onEditL
           // Arrow keys are handled above, in grid steps and as one undoable change.
           disableKeyboardA11y
           onlyRenderVisibleElements={diagram.nodes.length > LARGE_DIAGRAM}
-          colorMode="system"
+          colorMode={theme}
           snapToGrid
           snapGrid={[8, 8]}
           fitView
+          // The default floor (0.5) can't fit a wide diagram into a narrow canvas pane.
+          minZoom={0.1}
           proOptions={{ hideAttribution: false }}
         >
           <Background gap={16} />
           <Controls />
-          <MiniMap pannable zoomable />
+          <MiniMap pannable zoomable style={{ width: 168, height: 112 }} />
         </ReactFlow>
       </div>
     </CanvasActionsContext.Provider>

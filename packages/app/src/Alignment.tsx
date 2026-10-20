@@ -18,6 +18,7 @@ import {
 import type { Selection } from './Canvas';
 import { ColorPicker } from './ColorPicker';
 import { duplicateSelection } from './clipboard';
+import { UiIcon } from './Icon';
 
 interface Props {
   diagram: Diagram;
@@ -95,7 +96,7 @@ export function MultiSelection({ diagram, ids, onChange, onSelect }: Props) {
   return (
     <aside className="inspector">
       <h2>{t('inspector.multiSelected', { count: nodes.length })}</h2>
-      <div className="align-section">
+      <div className="inspector-section align-section">
         <h3>{t('inspector.align')}</h3>
         <div className="align-buttons" role="group" aria-label={t('inspector.align')}>
           {(Object.keys(ALIGN_ICONS) as AlignMode[]).map((mode) => (
@@ -134,29 +135,36 @@ export function MultiSelection({ diagram, ids, onChange, onSelect }: Props) {
           nodes.length < 3 && <p className="muted small">{t('inspector.distributeHint')}</p>
         )}
       </div>
-      <ColorPicker diagram={diagram} ids={ids} onChange={onChange} />
+      <section className="inspector-section">
+        <h3>{t('inspector.sectionAppearance')}</h3>
+        <ColorPicker diagram={diagram} ids={ids} onChange={onChange} />
+      </section>
       <p className="muted small">{t('inspector.nudgeHint')}</p>
-      <button
-        title={t('inspector.duplicateHint')}
-        onClick={() => {
-          const out = duplicateSelection(diagram, ids);
-          onChange(out.diagram);
-          onSelect(out.selection);
-        }}
-      >
-        {t('inspector.duplicate')}
-      </button>
-      <button
-        className="danger"
-        onClick={() => {
-          let d = diagram;
-          for (const n of nodes) d = removeNode(d, n.id);
-          onChange(d);
-          onSelect(null);
-        }}
-      >
-        {t('inspector.delete')}
-      </button>
+      <div className="inspector-actions">
+        <button
+          title={t('inspector.duplicateHint')}
+          onClick={() => {
+            const out = duplicateSelection(diagram, ids);
+            onChange(out.diagram);
+            onSelect(out.selection);
+          }}
+        >
+          <UiIcon name="copy" />
+          {t('inspector.duplicate')}
+        </button>
+        <button
+          className="danger"
+          onClick={() => {
+            let d = diagram;
+            for (const n of nodes) d = removeNode(d, n.id);
+            onChange(d);
+            onSelect(null);
+          }}
+        >
+          <UiIcon name="trash-2" />
+          {t('inspector.delete')}
+        </button>
+      </div>
     </aside>
   );
 }

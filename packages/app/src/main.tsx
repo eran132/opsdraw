@@ -7,7 +7,9 @@ import './i18n';
 import { App } from './App';
 import { loadPacks } from './icons';
 import { initMermaid } from './Preview';
+import { applyTheme } from './theme';
 
+applyTheme();
 initMermaid();
 void loadPacks();
 
