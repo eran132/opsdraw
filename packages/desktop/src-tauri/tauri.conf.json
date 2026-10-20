@@ -14,8 +14,9 @@
       {
         "label": "main",
         "title": "OpsDraw",
-        "width": 1440,
-        "height": 900,
+        "width": 1280,
+        "height": 760,
+        "center": true,
         "minWidth": 960,
         "minHeight": 600
       }
