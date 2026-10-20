@@ -17,6 +17,7 @@ import {
 } from './align';
 import type { Selection } from './Canvas';
 import { ColorPicker } from './ColorPicker';
+import { duplicateSelection } from './clipboard';
 
 interface Props {
   diagram: Diagram;
@@ -135,6 +136,16 @@ export function MultiSelection({ diagram, ids, onChange, onSelect }: Props) {
       </div>
       <ColorPicker diagram={diagram} ids={ids} onChange={onChange} />
       <p className="muted small">{t('inspector.nudgeHint')}</p>
+      <button
+        title={t('inspector.duplicateHint')}
+        onClick={() => {
+          const out = duplicateSelection(diagram, ids);
+          onChange(out.diagram);
+          onSelect(out.selection);
+        }}
+      >
+        {t('inspector.duplicate')}
+      </button>
       <button
         className="danger"
         onClick={() => {

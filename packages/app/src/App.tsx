@@ -2,11 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ReactFlowProvider } from '@xyflow/react';
 import {
-  dropStaleRoutes,
   emptyDiagram,
   importIac,
   parseMermaid,
   renderDiagramSvg,
+  repickMovedSides,
   serializeArchitecture,
   type Diagram,
   type LayoutDirection,
@@ -124,9 +124,13 @@ export function App() {
 
   const diagramRef = useRef(diagram);
   diagramRef.current = diagram;
-  /** An edit made on the canvas or in the inspector: routes of edges it moved are dropped. */
+  /**
+   * An edit made on the canvas or in the inspector. When it moved nodes (drag, align, nudge, group
+   * resize), edges with a moved end get their sides re-picked, so lined-up nodes get a straight
+   * edge, and routes that no longer fit are dropped.
+   */
   const editDiagram = useCallback(
-    (d: Diagram) => applyDiagram(dropStaleRoutes(diagramRef.current, d)),
+    (d: Diagram) => applyDiagram(repickMovedSides(diagramRef.current, d)),
     [applyDiagram],
   );
 

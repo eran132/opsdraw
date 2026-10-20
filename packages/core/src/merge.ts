@@ -253,6 +253,42 @@ export function mergeLayout(previous: Diagram, next: Diagram): MergeResult {
   };
 }
 
+/** True for ids in both diagrams whose absolute rectangle (position and size) is unchanged. */
+function sameRect(prev: Diagram, next: Diagram): (id: string) => boolean {
+  const before = absoluteRects(prev);
+  const after = absoluteRects(next);
+  return (id) => {
+    const a = before.get(id);
+    const b = after.get(id);
+    return !!a && !!b && a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
+  };
+}
+
+/**
+ * Ids of the nodes that are in both diagrams but sit somewhere else in `next`: moved or resized,
+ * directly or because a group around them moved (positions are compared in absolute terms).
+ */
+export function movedNodes(prev: Diagram, next: Diagram): Set<string> {
+  const same = sameRect(prev, next);
+  const before = new Set(prev.nodes.map((n) => n.id));
+  return new Set(next.nodes.filter((n) => before.has(n.id) && !same(n.id)).map((n) => n.id));
+}
+
+/**
+ * For a canvas edit that moved nodes (drag, align, nudge, group resize): re-picks the sides of
+ * every edge with an end that moved, so two nodes lined up get a straight edge, and drops routes
+ * that no longer fit. Other edges keep their sides (they still occupy them), Mermaid's one edge
+ * per side holds, and no hub junctions are added: a node with more than four edges keeps its
+ * sides. An edit that moved nothing only has its stale routes dropped.
+ */
+export function repickMovedSides(prev: Diagram, next: Diagram): Diagram {
+  const moved = movedNodes(prev, next);
+  const touches = (e: ArchEdge) => moved.has(e.from) || moved.has(e.to);
+  if (!moved.size || !next.edges.some(touches)) return dropStaleRoutes(prev, next);
+  const ported = assignPorts(next, undefined, { fixed: (e) => !touches(e), hubs: false });
+  return dropStaleRoutes(prev, ported);
+}
+
 /**
  * Drops the stored route of every edge that no longer fits `next`: one of its ends moved or
  * was resized (directly, or because a group around it moved), or its sides changed. Use it when
@@ -260,13 +296,7 @@ export function mergeLayout(previous: Diagram, next: Diagram): MergeResult {
  */
 export function dropStaleRoutes(prev: Diagram, next: Diagram): Diagram {
   if (!next.edges.some((e) => e.route)) return next;
-  const before = absoluteRects(prev);
-  const after = absoluteRects(next);
-  const same = (id: string) => {
-    const a = before.get(id);
-    const b = after.get(id);
-    return !!a && !!b && a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
-  };
+  const same = sameRect(prev, next);
   const prevEdges = new Map<string, ArchEdge>();
   const prevKeys = occurrenceKeys(prev.edges);
   prev.edges.forEach((e, i) => prevEdges.set(prevKeys[i]!, e));

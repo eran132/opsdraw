@@ -1,7 +1,7 @@
 import type { ArchNode, Diagram, NodeStyle, Point, Rect, Side } from './model';
 import { GROUP_PADDING, JUNCTION_SIZE, SERVICE_SIZE } from './layout';
 import { serializeArchitecture } from './mermaid';
-import { parseIconRef } from './icons';
+import { catalogEntry, parseIconRef } from './icons';
 import {
   cssColor,
   formatStyle,
@@ -398,7 +398,7 @@ const joinNames = (names: string[]) =>
 
 /**
  * What a legend lists: each distinct icon (the node's label when only one node uses it, else the
- * humanized icon name), then each distinct color, labelled with the groups that use it (or the
+ * catalog title or humanized icon name), then each distinct color, labelled with the groups that use it (or the
  * nodes, when no group does). In order of first use.
  */
 export function legendEntries(diagram: Diagram): LegendEntry[] {
@@ -421,7 +421,8 @@ export function legendEntries(diagram: Diagram): LegendEntry[] {
     out.push({
       kind: 'icon',
       icon,
-      label: nodes.length === 1 ? name(nodes[0]!) : humanizeIcon(icon),
+      label:
+        nodes.length === 1 ? name(nodes[0]!) : (catalogEntry(icon)?.title ?? humanizeIcon(icon)),
     });
   }
   for (const { style, nodes } of colors.values()) {

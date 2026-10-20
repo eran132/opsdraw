@@ -86,6 +86,25 @@ npm run dev
 
 Then open http://localhost:5173.
 
+### Keyboard shortcuts
+
+On macOS, use Cmd instead of Ctrl. Canvas shortcuts apply while the canvas has focus; in the code editor and in text fields the keys keep their usual meaning.
+
+| Keys                           | Action                                                                                       |
+| ------------------------------ | -------------------------------------------------------------------------------------------- |
+| Ctrl+D                         | Duplicate the selection next to it (a group brings everything inside it)                     |
+| Ctrl+C / Ctrl+X                | Copy / cut the selection to the clipboard, as Mermaid text you can also paste into an editor |
+| Ctrl+V                         | Paste at the pointer (into the group under it); pastes Mermaid copied from anywhere          |
+| Delete / Backspace             | Delete the selection                                                                         |
+| Arrow keys                     | Nudge the selection by 8 px                                                                  |
+| Shift+arrow keys               | Nudge by 1 px                                                                                |
+| Ctrl+Z / Ctrl+Y (Ctrl+Shift+Z) | Undo / redo a canvas edit                                                                    |
+| Ctrl+S / Ctrl+Shift+S          | Save / save as                                                                               |
+| Ctrl+O                         | Open a file                                                                                  |
+| Shift+click / Shift+drag       | Add to the selection / draw a selection box                                                  |
+
+Moving nodes (dragging, aligning, nudging) re-picks the attachment sides of their edges, so two nodes lined up get a straight edge.
+
 ### MCP server
 
 ```bash

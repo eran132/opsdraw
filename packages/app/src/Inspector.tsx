@@ -5,6 +5,7 @@ import type { Selection } from './Canvas';
 import { Icon } from './Icon';
 import { MultiSelection } from './Alignment';
 import { ColorPicker } from './ColorPicker';
+import { duplicateSelection } from './clipboard';
 
 interface Props {
   diagram: Diagram;
@@ -163,6 +164,7 @@ export function Inspector({ diagram, selection, onChange, onSelect, focusLabel }
           ))}
         </select>
       </label>
+      <DuplicateButton ids={[node.id]} />
       <button
         className="danger"
         onClick={() => {
@@ -174,6 +176,21 @@ export function Inspector({ diagram, selection, onChange, onSelect, focusLabel }
       </button>
     </aside>
   );
+
+  function DuplicateButton({ ids }: { ids: string[] }) {
+    return (
+      <button
+        title={t('inspector.duplicateHint')}
+        onClick={() => {
+          const out = duplicateSelection(diagram, ids);
+          onChange(out.diagram);
+          onSelect(out.selection);
+        }}
+      >
+        {t('inspector.duplicate')}
+      </button>
+    );
+  }
 
   function Empty() {
     return (

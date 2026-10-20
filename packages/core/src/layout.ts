@@ -66,6 +66,11 @@ interface End {
 export interface AssignPortsOptions {
   /** Edges whose sides must stay as they are (they still occupy their sides). */
   fixed?: (edge: ArchEdge, index: number) => boolean;
+  /**
+   * Route the extra edges of a node with more than four through a new hub junction (default).
+   * With `false` no nodes are added: the ends of such a node keep the sides they have.
+   */
+  hubs?: boolean;
 }
 
 /**
@@ -118,6 +123,7 @@ export function assignPorts(
   });
   for (let i = 0; i < nodes.length; i++) {
     const node = nodes[i]!;
+    if (options.hubs === false) break;
     if (node.kind === 'group' || (degree.get(node.id) ?? 0) <= 4) continue;
     const r = boxes.get(node.id);
     if (!r) continue;
@@ -224,6 +230,8 @@ export function assignPorts(
       .map((e) => ({ end: e, costs: costsFor(id, e) }))
       .filter((m): m is { end: End; costs: Record<Side, number> } => !!m.costs);
     if (!movable.length) continue;
+    // Without hubs a node with more ends than sides can't be fixed by re-picking: leave it.
+    if (options.hubs === false && ends.length > SIDES.length) continue;
     const open = SIDES.filter((s) => !taken.has(s));
     if (movable.length <= open.length) {
       let bestTotal = Infinity;
@@ -249,7 +257,7 @@ export function assignPorts(
       };
       search(0, 0);
       movable.forEach((m, k) => set(m.end, bestPick[k]!));
-    } else {
+    } else if (options.hubs !== false) {
       // More edges than free sides (fixed edges in the way): best free side, else best side.
       const used = new Set(taken);
       for (const m of movable) {

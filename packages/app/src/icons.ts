@@ -107,8 +107,15 @@ export interface SearchHit {
 
 const lucideNames = Object.keys(lucidePack.icons);
 
-/** Searches the curated set first, then every Lucide icon, then imported packs. */
-export function searchIcons(query: string, limit = 60): SearchHit[] {
+/**
+ * Searches the curated set first (by name, English title, keywords and `titleOf`, the title in
+ * the UI language), then imported packs, then every Lucide icon.
+ */
+export function searchIcons(
+  query: string,
+  limit = 60,
+  titleOf: (ref: string) => string = (ref) => ref,
+): SearchHit[] {
   const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
   if (!terms.length) return [];
   const matches = (text: string) => terms.every((t) => text.includes(t));
@@ -121,7 +128,8 @@ export function searchIcons(query: string, limit = 60): SearchHit[] {
   };
   for (const cat of GENERIC_CATALOG)
     for (const icon of cat.icons)
-      if (matches(`${icon.ref} ${icon.keywords}`)) push(icon.ref, icon.ref);
+      if (matches(`${icon.ref} ${icon.title} ${titleOf(icon.ref)} ${icon.keywords}`.toLowerCase()))
+        push(icon.ref, titleOf(icon.ref));
   for (const pack of userPacks.values())
     for (const name of Object.keys(pack.icons))
       if (matches(`${name} ${pack.keywords?.[name] ?? ''}`.toLowerCase()))

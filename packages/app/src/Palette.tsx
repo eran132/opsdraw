@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { GENERIC_CATALOG, parseIconRef } from '@opsdraw/core';
+import { GENERIC_CATALOG, catalogEntry, catalogKey, parseIconRef } from '@opsdraw/core';
 import { Icon, usePacksVersion } from './Icon';
 import { installedPacks, searchIcons } from './icons';
 import { DRAG_MIME, type PaletteItem } from './Canvas';
@@ -10,7 +10,7 @@ interface Props {
   onPick(icon: string): void;
 }
 
-/** "square-function" -> "Square function", used as a default label. */
+/** "square-function" -> "Square function": the name of icons outside the curated set. */
 export const humanize = (ref: string) => {
   const s = parseIconRef(ref).name.replace(/[-_]+/g, ' ').trim();
   return s.charAt(0).toUpperCase() + s.slice(1);
@@ -52,14 +52,22 @@ export function Palette({ onPick }: Props) {
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
   usePacksVersion();
-  const hits = useMemo(() => searchIcons(query), [query]);
+  /** Curated icons have a translated name ("Firewall"); others are named after the icon. */
+  const titleOf = useCallback(
+    (ref: string) => {
+      const entry = catalogEntry(ref);
+      return entry ? t(`icons.${catalogKey(ref)}`, { defaultValue: entry.title }) : humanize(ref);
+    },
+    [t],
+  );
+  const hits = useMemo(() => searchIcons(query, 60, titleOf), [query, titleOf]);
   const packs = installedPacks();
 
   const tileFor = (ref: string) => (
     <Tile
       key={ref}
-      item={{ kind: 'service', icon: ref, label: humanize(ref) }}
-      title={humanize(ref)}
+      item={{ kind: 'service', icon: ref, label: titleOf(ref) }}
+      title={titleOf(ref)}
       onClick={() => onPick(ref)}
     />
   );

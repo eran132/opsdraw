@@ -835,6 +835,8 @@ export async function importTerraform(
 export interface IconHit {
   ref: string;
   source: 'curated' | 'mermaid-builtin' | 'lucide';
+  /** Display name of curated icons (e.g. lucide:brick-wall is "Firewall"). */
+  title?: string;
   keywords?: string;
 }
 
@@ -882,9 +884,13 @@ export function listIcons(args: { query?: string; limit?: number } = {}) {
 
   for (const cat of GENERIC_CATALOG) {
     for (const icon of cat.icons) {
-      const text = `${icon.ref} ${icon.keywords} ${cat.id}`.toLowerCase();
+      const text = `${icon.ref} ${icon.title} ${icon.keywords} ${cat.id}`.toLowerCase();
       const s = scoreText(text, text.split(/[\s:-]+/));
-      if (s) push({ ref: icon.ref, source: 'curated', keywords: icon.keywords }, s + 10);
+      if (s)
+        push(
+          { ref: icon.ref, source: 'curated', title: icon.title, keywords: icon.keywords },
+          s + 10,
+        );
     }
   }
   for (const name of MERMAID_BUILTIN_ICONS) {
@@ -904,6 +910,7 @@ export function listIcons(args: { query?: string; limit?: number } = {}) {
     total: terms.length ? hits.length : total.curatedAndBuiltin,
     icons: hits.slice(0, limit).map((h): IconHit => {
       const out: IconHit = { ref: h.ref, source: h.source };
+      if (h.title) out.title = h.title;
       if (h.keywords) out.keywords = h.keywords;
       return out;
     }),

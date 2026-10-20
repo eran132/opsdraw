@@ -20,7 +20,9 @@ export const BUILTIN_TO_LUCIDE: Record<string, string> = {
 export interface IconEntry {
   /** The reference written into the diagram. */
   ref: string;
-  /** English search keywords; UI labels come from translations. */
+  /** English display name; the app translates it (`icons.<key>`, see `catalogKey`). */
+  title: string;
+  /** English search keywords. */
   keywords: string;
 }
 
@@ -29,83 +31,108 @@ export interface IconCategory {
   icons: IconEntry[];
 }
 
-const l = (name: string, keywords: string): IconEntry => ({ ref: `lucide:${name}`, keywords });
-const b = (name: string, keywords: string): IconEntry => ({ ref: name, keywords });
+const l = (name: string, title: string, keywords: string): IconEntry => ({
+  ref: `lucide:${name}`,
+  title,
+  keywords,
+});
+const b = (name: string, title: string, keywords: string): IconEntry => ({
+  ref: name,
+  title,
+  keywords,
+});
 
 /** Curated starter palette. Any other Lucide icon can still be found by search. */
 export const GENERIC_CATALOG: IconCategory[] = [
   {
     id: 'compute',
     icons: [
-      b('server', 'server vm instance host compute ec2'),
-      l('cpu', 'cpu compute processor'),
-      l('square-function', 'function serverless lambda faas'),
-      l('container', 'container docker pod'),
-      l('boxes', 'cluster kubernetes k8s nodes'),
-      l('box', 'box generic component'),
+      b('server', 'Server', 'server vm instance host compute ec2'),
+      l('cpu', 'CPU', 'cpu compute processor'),
+      l('square-function', 'Function', 'function serverless lambda faas'),
+      l('container', 'Container', 'container docker'),
+      l('package', 'Kubernetes pod', 'pod kubernetes k8s workload deployment'),
+      l('boxes', 'Cluster', 'cluster kubernetes k8s nodes'),
+      l('box', 'Component', 'box generic component'),
+      l('package-search', 'Container registry', 'registry container image ecr acr gcr docker hub'),
     ],
   },
   {
     id: 'data',
     icons: [
-      b('database', 'database sql rds postgres mysql db'),
-      b('disk', 'disk volume block storage ebs'),
-      l('archive', 'object storage bucket blob s3 archive'),
-      l('folder-tree', 'file share nfs filesystem'),
-      l('table', 'warehouse analytics table'),
-      l('zap', 'cache redis memcached'),
+      b('database', 'Database', 'database sql rds postgres mysql db'),
+      b('disk', 'Disk', 'disk volume block storage ebs'),
+      l('archive', 'Object storage', 'object storage bucket blob s3 archive'),
+      l('folder-tree', 'File share', 'file share nfs filesystem'),
+      l('table', 'Data warehouse', 'warehouse analytics table'),
+      l('zap', 'Cache', 'cache redis memcached'),
+      l('database-backup', 'Backup', 'backup restore snapshot recovery'),
+      l('search', 'Search', 'search elasticsearch opensearch index'),
+      l('chart-line', 'Analytics', 'analytics bi dashboard reporting'),
     ],
   },
   {
     id: 'network',
     icons: [
-      b('internet', 'internet public web globe'),
-      b('cloud', 'cloud region provider'),
-      l('network', 'network vpc vnet subnet'),
-      l('split', 'load balancer lb alb nlb'),
-      l('router', 'router gateway nat'),
-      l('waypoints', 'dns cdn edge route'),
+      b('internet', 'Internet', 'internet public web globe'),
+      b('cloud', 'Cloud', 'cloud region provider'),
+      l('network', 'Network', 'network vpc vnet subnet'),
+      l('split', 'Load balancer', 'load balancer lb alb nlb'),
+      l('door-open', 'API gateway', 'api gateway apigw ingress entry'),
+      l('router', 'Router / gateway', 'router gateway nat'),
+      l('waypoints', 'DNS / CDN', 'dns cdn edge route'),
+      l('globe-lock', 'VPN', 'vpn tunnel ipsec wireguard private link'),
     ],
   },
   {
     id: 'messaging',
     icons: [
-      l('list-ordered', 'queue sqs fifo'),
-      l('radio-tower', 'pubsub topic sns event bus kafka'),
-      l('webhook', 'webhook api callback'),
-      l('mail', 'email smtp mail'),
-      l('bell', 'notification alert'),
-      l('workflow', 'workflow orchestration step functions pipeline'),
+      l('list-ordered', 'Queue', 'queue sqs fifo'),
+      l('radio-tower', 'Pub/Sub', 'pubsub topic sns event bus kafka'),
+      l('webhook', 'API / webhook', 'webhook api callback'),
+      l('mail', 'Email', 'email smtp mail'),
+      l('bell', 'Notifications', 'notification alert'),
+      l('workflow', 'Workflow', 'workflow orchestration step functions pipeline'),
     ],
   },
   {
     id: 'security',
     icons: [
-      l('shield', 'firewall waf security'),
-      l('key-round', 'secret key vault kms'),
-      l('lock', 'tls encryption private'),
-      l('fingerprint', 'identity iam auth sso'),
+      l('brick-wall', 'Firewall', 'firewall acl security group nsg network policy'),
+      l('shield', 'Security / WAF', 'waf security firewall protection'),
+      l('key-round', 'Secrets / keys', 'secret key vault kms'),
+      l('lock', 'Encryption', 'tls encryption private'),
+      l('fingerprint', 'Identity', 'identity iam auth sso'),
     ],
   },
   {
     id: 'clients',
     icons: [
-      l('user', 'user person actor'),
-      l('users', 'users team customers'),
-      l('monitor', 'browser desktop client'),
-      l('smartphone', 'mobile phone app'),
+      l('user', 'User', 'user person actor'),
+      l('users', 'Users', 'users team customers'),
+      l('monitor', 'Client', 'browser desktop client'),
+      l('smartphone', 'Mobile app', 'mobile phone app'),
     ],
   },
   {
     id: 'ops',
     icons: [
-      l('activity', 'monitoring metrics observability'),
-      l('scroll-text', 'logs logging audit'),
-      l('git-branch', 'git ci cd repository'),
-      l('settings', 'config settings'),
+      l('activity', 'Monitoring', 'monitoring metrics observability'),
+      l('scroll-text', 'Logs', 'logs logging audit'),
+      l('git-branch', 'CI/CD', 'git ci cd repository'),
+      l('settings', 'Configuration', 'config settings'),
     ],
   },
 ];
+
+/** Translation key of a curated icon: its name without the prefix (`lucide:split` -> `split`). */
+export const catalogKey = (ref: string): string => parseIconRef(ref).name;
+
+const CATALOG_BY_REF = new Map(GENERIC_CATALOG.flatMap((c) => c.icons.map((i) => [i.ref, i])));
+
+/** The curated entry for an icon reference, if it is one of the palette's icons. */
+export const catalogEntry = (ref: string | undefined): IconEntry | undefined =>
+  ref === undefined ? undefined : CATALOG_BY_REF.get(ref);
 
 /** Splits `prefix:name`; built-ins have no prefix. */
 export function parseIconRef(ref: string): { prefix: string | null; name: string } {

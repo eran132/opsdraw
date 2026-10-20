@@ -27,6 +27,7 @@ import {
 } from '@opsdraw/core';
 import { CanvasActionsContext, nodeTypes, type ArchFlowNode } from './nodes';
 import { edgeTypes } from './edges';
+import { copySelection, cutSelection, duplicateSelection, pasteClipboard } from './clipboard';
 
 export type Selection =
   | { type: 'node'; id: string }
@@ -345,6 +346,47 @@ export function Canvas({ diagram, onChange, selection, onSelect, fitKey, onEditL
   commitNudgeRef.current = commitNudge;
   useEffect(() => () => commitNudgeRef.current(), []);
 
+  /** Pointer position on the canvas (flow coordinates), or null when it is elsewhere. */
+  const pointer = useRef<{ x: number; y: number } | null>(null);
+
+  /** Ctrl/Cmd+D duplicates, +C copies, +X cuts and +V pastes the canvas selection. */
+  const clipboardAction = useCallback(
+    async (key: 'd' | 'c' | 'x' | 'v') => {
+      const d = diagramRef.current;
+      const ids = nodesRef.current.filter((n) => n.selected).map((n) => n.id);
+      if (key === 'd') {
+        if (!ids.length) return;
+        const out = duplicateSelection(d, ids);
+        onChange(out.diagram);
+        onSelect(out.selection);
+      } else if (key === 'c') {
+        await copySelection(d, ids);
+      } else if (key === 'x') {
+        const out = await cutSelection(d, ids);
+        if (!out) return;
+        onChange(out);
+        onSelect(null);
+        // The focused node is gone; keep the focus on the canvas so a paste can follow.
+        container.current?.focus({ preventScroll: true });
+      } else {
+        const box = container.current?.getBoundingClientRect();
+        const fallback = box
+          ? rf.screenToFlowPosition({ x: box.x + box.width / 3, y: box.y + box.height / 3 })
+          : { x: 0, y: 0 };
+        const out = await pasteClipboard(d, {
+          pointer: pointer.current,
+          fallback,
+          groupAt: (p) => groupAt(p),
+        });
+        // The diagram may have changed while the clipboard was read; paste into the current one.
+        if (!out || diagramRef.current !== d) return;
+        onChange(out.diagram);
+        onSelect(out.selection);
+      }
+    },
+    [groupAt, onChange, onSelect, rf],
+  );
+
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -352,6 +394,13 @@ export function Canvas({ diagram, onChange, selection, onSelect, fitKey, onEditL
       const dir = ARROWS[e.key];
       if (!dir || e.ctrlKey || e.metaKey || e.altKey) {
         commitNudge();
+        if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey) {
+          const key = e.key.toLowerCase();
+          if (key === 'd' || key === 'c' || key === 'x' || key === 'v') {
+            e.preventDefault();
+            void clipboardAction(key);
+          }
+        }
         return;
       }
       const all = nodesRef.current;
@@ -386,7 +435,7 @@ export function Canvas({ diagram, onChange, selection, onSelect, fitKey, onEditL
       clearTimeout(burst.timer);
       burst.timer = setTimeout(commitNudge, NUDGE_COMMIT_MS);
     },
-    [commitNudge],
+    [clipboardAction, commitNudge],
   );
 
   return (
@@ -402,6 +451,12 @@ export function Canvas({ diagram, onChange, selection, onSelect, fitKey, onEditL
           if (el && !el.contains(document.activeElement)) el.focus({ preventScroll: true });
         }}
         onKeyDown={onKeyDown}
+        onMouseMove={(e) => {
+          pointer.current = rf.screenToFlowPosition({ x: e.clientX, y: e.clientY });
+        }}
+        onMouseLeave={() => {
+          pointer.current = null;
+        }}
         onBlur={(e) => {
           if (!e.currentTarget.contains(e.relatedTarget as Node | null)) commitNudge();
         }}

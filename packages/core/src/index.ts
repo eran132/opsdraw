@@ -15,6 +15,7 @@ export * from './layout';
 export * from './svg';
 export * from './style';
 export * from './png';
+export * from './clipboard';
 
 import { parseArchitecture } from './mermaid';
 import { parseFlowchart } from './flowchart';

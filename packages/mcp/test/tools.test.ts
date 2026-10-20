@@ -372,6 +372,14 @@ describe('list_icons', () => {
     expect(arrows.total).toBeGreaterThan(5);
     expect(tools.listIcons({ query: 'database' }).icons[0]?.ref).toBe('database');
   });
+
+  it('gives curated icons a display title and matches it', () => {
+    const r = tools.listIcons({ query: 'firewall' });
+    expect(r.icons[0]).toMatchObject({ ref: 'lucide:brick-wall', title: 'Firewall' });
+    const lb = tools.listIcons({ query: 'load balancer' });
+    expect(lb.icons[0]).toMatchObject({ ref: 'lucide:split', title: 'Load balancer' });
+    expect(tools.listIcons().icons.every((i) => i.source !== 'curated' || !!i.title)).toBe(true);
+  });
 });
 
 describe('path safety', () => {

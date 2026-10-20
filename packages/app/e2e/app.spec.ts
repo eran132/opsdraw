@@ -66,7 +66,7 @@ test.describe('text and canvas stay in sync', () => {
     await page.goto('/');
     await setEditorText(page, SIMPLE);
     await expect(page.locator('.react-flow__node')).toHaveCount(3);
-    const tile = page.locator('.palette .tile[title="List ordered"]');
+    const tile = page.locator('.palette .tile[title="Firewall"]');
     const pane = page.locator('.react-flow__pane');
     const box = (await pane.boundingBox())!;
     // Playwright's dragTo doesn't reliably drive HTML5 drag-and-drop onto the canvas, so the
@@ -78,7 +78,7 @@ test.describe('text and canvas stay in sync', () => {
     await pane.dispatchEvent('drop', { dataTransfer, ...at });
     await expect(page.locator('.react-flow__node')).toHaveCount(4);
     await expect(page.locator('.cm-content')).toContainText(
-      'service list_ordered(lucide:list-ordered)[List ordered]',
+      'service firewall(lucide:brick-wall)[Firewall]',
     );
   });
 
@@ -635,5 +635,163 @@ test.describe('colors and legend', () => {
     // Icons used once are listed by their node's label (VPC's cloud), the color by its group.
     expect(svg).toContain('>Orders DB</text>');
     expect(svg.split('>VPC</text>').length - 1).toBe(3);
+  });
+});
+
+const KINKED = `architecture-beta
+  service api(server)[API]
+  service queue(lucide:list-ordered)[Queue]
+  service worker(server)[Worker]
+  api:B -[enqueue]-> L:queue
+  queue:R --> L:worker
+  %% @pos api 40 40
+  %% @pos queue 320 200
+  %% @pos worker 560 200
+  %% @route api queue 88,248
+`;
+
+/** The y of every point of an edge's drawn path. */
+const pathYs = (d: string) => [...d.matchAll(/(-?[\d.]+)[ ,](-?[\d.]+)/g)].map((m) => Number(m[2]));
+
+test.describe('straight edges', () => {
+  test('aligning two nodes re-picks the sides of the edge between them, so it is straight', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await setEditorText(page, KINKED);
+    await expect(page.locator('.react-flow__node')).toHaveCount(3);
+    await expect(page.locator('.react-flow__edge-routed')).toHaveCount(1);
+    await canvasNode(page, 'API').click();
+    await canvasNode(page, 'Queue').click({ modifiers: ['Shift'] });
+    await page.getByRole('button', { name: 'Align middle' }).click();
+    await expect.poll(() => editorDoc(page)).toContain('api:R -[enqueue]-> L:queue');
+    const doc = await editorDoc(page);
+    expect(doc).not.toContain('@route api queue');
+    // The other edge had no moved end and keeps its sides.
+    expect(doc).toContain('queue:R --> L:worker');
+    const d = await page
+      .locator('.react-flow__edge')
+      .filter({ hasText: 'enqueue' })
+      .locator('path.react-flow__edge-path')
+      .getAttribute('d');
+    const ys = pathYs(d ?? '');
+    expect(ys.length).toBeGreaterThan(1);
+    expect(new Set(ys).size).toBe(1);
+  });
+});
+
+test.describe('duplicate, copy and paste', () => {
+  test.use({ permissions: ['clipboard-read', 'clipboard-write'] });
+
+  test('Ctrl+D duplicates a node with a new id, offset, and selects the copy', async ({ page }) => {
+    await page.goto('/');
+    await setEditorText(page, PLACED);
+    await expect(page.locator('.react-flow__node')).toHaveCount(3);
+    await canvasNode(page, 'Alpha').click();
+    await page.keyboard.press('ControlOrMeta+D');
+    await expect.poll(() => editorDoc(page)).toContain('service a2(server)[Alpha]');
+    expect(await editorDoc(page)).toContain('%% @pos a2 64 64');
+    await expect(page.locator('.react-flow__node.selected')).toHaveCount(1);
+    await expect(page.locator('.react-flow__node.selected')).toHaveAttribute('data-id', 'a2');
+    // The inspector's button does the same.
+    await page.locator('.inspector').getByRole('button', { name: 'Duplicate' }).click();
+    await expect.poll(() => editorDoc(page)).toContain('service a3(server)[Alpha]');
+    expect(await editorDoc(page)).toContain('%% @pos a3 88 88');
+  });
+
+  test('duplicating a group copies its children and the edges inside it', async ({ page }) => {
+    await page.goto('/');
+    await setEditorText(page, SIMPLE);
+    await expect(page.locator('.react-flow__node')).toHaveCount(3);
+    await canvasNode(page, 'VPC').locator('.arch-group-title').click();
+    await page.keyboard.press('ControlOrMeta+D');
+    await expect.poll(() => editorDoc(page)).toContain('group vpc2(cloud)[VPC]');
+    const doc = await editorDoc(page);
+    expect(doc).toContain('service web2(server)[Web] in vpc2');
+    expect(doc).toContain('service db2(database)[Orders DB] in vpc2');
+    expect(doc).toContain('web2:R --> L:db2');
+    await expect(page.locator('.react-flow__node')).toHaveCount(6);
+    await expect(page.locator('.react-flow__edge')).toHaveCount(2);
+  });
+
+  test('copy and paste through the system clipboard, at the pointer, as one undo step', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await setEditorText(page, PLACED);
+    await expect(page.locator('.react-flow__node')).toHaveCount(3);
+    await canvasNode(page, 'Alpha').click();
+    await page.keyboard.press('ControlOrMeta+C');
+    await expect
+      .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+      .toContain('service a(server)[Alpha]');
+    const clip = await page.evaluate(() => navigator.clipboard.readText());
+    expect(clip).toContain('%% @pos a 0 0');
+
+    const pane = (await page.locator('.react-flow__pane').boundingBox())!;
+    await page.mouse.move(pane.x + pane.width - 160, pane.y + pane.height - 160);
+    await page.keyboard.press('ControlOrMeta+V');
+    await expect.poll(() => editorDoc(page)).toContain('service a2(server)[Alpha]');
+    await expect(page.locator('.react-flow__node')).toHaveCount(4);
+    await expect(page.locator('.react-flow__node.selected')).toHaveAttribute('data-id', 'a2');
+    // Pasted where the pointer is (within a few pixels: positions are whole canvas units).
+    const pasted = (await page.locator('.react-flow__node[data-id="a2"]').boundingBox())!;
+    expect(Math.abs(pasted.x - (pane.x + pane.width - 160))).toBeLessThan(8);
+    expect(Math.abs(pasted.y - (pane.y + pane.height - 160))).toBeLessThan(8);
+
+    await page.keyboard.press('ControlOrMeta+Z');
+    await expect.poll(() => editorDoc(page)).not.toContain('a2');
+    await expect(page.locator('.react-flow__node')).toHaveCount(3);
+  });
+
+  test('pasting into the code editor keeps the native behaviour', async ({ page }) => {
+    await page.goto('/');
+    await setEditorText(page, PLACED);
+    await expect(page.locator('.react-flow__node')).toHaveCount(3);
+    await canvasNode(page, 'Gamma').click();
+    await page.keyboard.press('ControlOrMeta+C');
+    await expect
+      .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+      .toContain('service c(disk)[Gamma]');
+    await page.locator('.cm-content').click();
+    await page.keyboard.press('ControlOrMeta+End');
+    await page.keyboard.press('ControlOrMeta+V');
+    await expect.poll(() => editorDoc(page)).toContain('%% @pos c 0 0');
+    // The text went into the editor, not onto the canvas as a new node.
+    expect(await editorDoc(page)).not.toContain('c2');
+  });
+
+  test('cut removes the selection and paste brings it back', async ({ page }) => {
+    await page.goto('/');
+    await setEditorText(page, PLACED);
+    await expect(page.locator('.react-flow__node')).toHaveCount(3);
+    await canvasNode(page, 'Beta').click();
+    await page.keyboard.press('ControlOrMeta+X');
+    await expect(page.locator('.react-flow__node')).toHaveCount(2);
+    await expect.poll(() => editorDoc(page)).not.toContain('service b(');
+    const pane = (await page.locator('.react-flow__pane').boundingBox())!;
+    await page.mouse.move(pane.x + pane.width / 2, pane.y + pane.height - 120);
+    await page.keyboard.press('ControlOrMeta+V');
+    await expect.poll(() => editorDoc(page)).toContain('service b(database)[Beta]');
+    await expect(page.locator('.react-flow__node')).toHaveCount(3);
+  });
+});
+
+test.describe('icon names', () => {
+  test('curated icons have readable, translated names', async ({ page }) => {
+    await page.goto('/');
+    const palette = page.locator('.palette');
+    await expect(palette.locator('.tile[title="Firewall"]')).toBeVisible();
+    await expect(palette.locator('.tile[title="Load balancer"]')).toBeVisible();
+    await expect(palette.locator('.tile[title="Shield"]')).toHaveCount(0);
+    await palette.getByRole('searchbox').fill('firewall');
+    await expect(palette.locator('.tile').first()).toHaveAttribute('title', 'Firewall');
+
+    await page.getByRole('combobox', { name: 'Language' }).selectOption('he');
+    await palette.getByRole('searchbox').fill('');
+    await expect(palette.locator('.tile[title="חומת אש"]')).toBeVisible();
+    // Searching in the UI language finds it too.
+    await palette.getByRole('searchbox').fill('חומת אש');
+    await expect(palette.locator('.tile').first()).toHaveAttribute('title', 'חומת אש');
   });
 });
