@@ -72,6 +72,34 @@ architecture-beta
   api:R --> L:db
 ```
 
+## How OpsDraw compares
+
+OpsDraw is narrower than general-purpose diagram tools: it is built for architecture diagrams
+that live in git next to the infrastructure they describe.
+
+|                                                   | OpsDraw                                          | draw.io                     | Excalidraw                  | Mermaid                    |
+| ------------------------------------------------- | ------------------------------------------------ | --------------------------- | --------------------------- | -------------------------- |
+| License                                           | Apache-2.0                                       | Apache-2.0                  | MIT                         | MIT                        |
+| Visual editor                                     | Yes                                              | Yes                         | Yes (hand-drawn style)      | No (text only)             |
+| Diagram as text                                   | Yes, two-way: text and canvas edit the same file | One-way import from Mermaid | One-way import from Mermaid | Yes                        |
+| File format                                       | Mermaid `.mmd` with layout comments              | XML (`.drawio`)             | JSON (`.excalidraw`)        | Mermaid text               |
+| Renders on GitHub/GitLab as-is                    | Yes (Mermaid)                                    | Via exported SVG/PNG        | Via exported SVG/PNG        | Yes                        |
+| Manual layout kept in the file                    | Yes                                              | Yes                         | Yes                         | No (automatic layout only) |
+| Import from Terraform, OpenTofu, Kubernetes, etc. | Yes, built in                                    | No                          | No                          | No                         |
+| CI check that a diagram matches the code          | Yes (`opsdraw import --check`, GitHub Action)    | No                          | No                          | No                         |
+| Git merge driver for diagram files                | Yes                                              | No                          | No                          | No                         |
+| MCP server for AI assistants                      | Yes, local (stdio)                               | Yes, official               | Yes, official               | Community servers          |
+| Vendor icons (AWS, Azure, GCP)                    | Imported by each user from the vendor            | Bundled                     | Community libraries         | Icon packs you register    |
+| Desktop app                                       | Windows, macOS, Linux                            | Windows, macOS, Linux       | Web / installable web app   | No (CLI and renderers)     |
+
+Hosted tools such as Eraser, Miro and Lucidchart also offer AI generation and MCP integrations;
+they run in the vendor's cloud, so diagrams and prompts are processed on their servers.
+
+Comparison as of October 2026. Products change quickly: if something here is out of date,
+please [open an issue](https://github.com/eran132/opsdraw/issues). draw.io, Excalidraw, Mermaid,
+Eraser, Miro and Lucidchart are trademarks of their respective owners; OpsDraw is not affiliated
+with them.
+
 ## Getting started
 
 Requires Node.js 20.19 or newer.
