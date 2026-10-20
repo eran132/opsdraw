@@ -969,10 +969,16 @@ test.describe('app bar, command palette and theme', () => {
     await page.getByRole('combobox', { name: 'Language' }).selectOption('he');
     const trigger = page.getByRole('button', { name: 'קובץ', exact: true });
     await trigger.click();
-    const menu = (await page.getByRole('menu', { name: 'קובץ' }).boundingBox())!;
     const button = (await trigger.boundingBox())!;
-    // Lined up with the trigger's right edge, so it opens leftwards, into the window.
-    expect(Math.abs(menu.x + menu.width - (button.x + button.width))).toBeLessThan(2);
+    // Lined up with the trigger's right edge, so it opens leftwards, into the window. Polled,
+    // because the short open animation can still be running when the menu first appears.
+    await expect
+      .poll(async () => {
+        const menu = (await page.getByRole('menu', { name: 'קובץ' }).boundingBox())!;
+        return Math.abs(menu.x + menu.width - (button.x + button.width));
+      })
+      .toBeLessThan(2);
+    const menu = (await page.getByRole('menu', { name: 'קובץ' }).boundingBox())!;
     expect(menu.x).toBeGreaterThan(0);
   });
 
