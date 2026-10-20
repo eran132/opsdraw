@@ -1,6 +1,6 @@
 [package]
 name = "opsdraw-desktop"
-version = "0.1.1"
+version = "0.1.2"
 description = "OpsDraw: architecture as code"
 license = "Apache-2.0"
 repository = "https://github.com/eran132/opsdraw"
