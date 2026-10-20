@@ -10,6 +10,10 @@ and can be generated from your infrastructure code or by an AI assistant over MC
   comments, which Mermaid ignores, so the file stays valid Mermaid everywhere. Auto-layout gives
   each edge its own node side, as Mermaid requires, adding a junction where a node has more than
   four connections; re-imports place only new nodes, next to what they connect to.
+- **Colors and legends.** Pick a color for a group or service in the inspector; it is stored as a
+  `%% @style <id> fill=blue stroke=blue` comment (hex `#rgb`/`#rrggbb` or one of blue, green,
+  orange, red, purple, gray, teal, yellow, which follow light/dark mode). Exports can add a legend
+  of the icons and colors used, and edges that cross get a small line jump.
 - **Diagrams from infrastructure code.** Import Terraform, CloudFormation, Kubernetes manifests
   (including OpenShift, KubeVirt, Gateway API, Helm/Flux/Argo apps), cluster configs (k0sctl, Talos,
   k3s/RKE2), Docker Compose, Ansible inventories and Nomad jobs. On-prem virtualization is covered

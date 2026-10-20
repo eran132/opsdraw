@@ -3,12 +3,14 @@ import type {
   ArchNode,
   Diagram,
   NodeLayout,
+  NodeStyle,
   ParseError,
   ParseResult,
   Point,
   Side,
 } from './model';
 import { emptyDiagram, idProblem, isValidIconRef } from './model';
+import { formatStyle, parseStyleTokens } from './style';
 
 /**
  * Mermaid `architecture-beta` <-> Diagram.
@@ -16,7 +18,8 @@ import { emptyDiagram, idProblem, isValidIconRef } from './model';
  * Canvas positions are stored as `%% @pos <id> <x> <y> [<w> <h>]` comment lines, which Mermaid
  * ignores, so the file stays valid Mermaid that renders anywhere (GitHub, GitLab, docs sites).
  * Edge routes from auto-layout are stored the same way, as `%% @route <from> <to> x,y x,y ...`
- * (absolute bend points between the two attachment sides).
+ * (absolute bend points between the two attachment sides), and colors as
+ * `%% @style <id> color=<c> fill=<c> stroke=<c>` (hex or a palette name; see `style.ts`).
  */
 
 const ID = '[A-Za-z_][\\w-]*';
@@ -33,6 +36,7 @@ const POS_RE = new RegExp(
 const ROUTE_RE = new RegExp(
   `^%%\\s*@route\\s+(${ID})\\s+(${ID})((?:\\s+-?[\\d.]+,-?[\\d.]+)+)\\s*$`,
 );
+const STYLE_RE = new RegExp(`^%%\\s*@style\\s+(${ID})((?:\\s+\\S+)*)\\s*$`);
 
 export function parseArchitecture(source: string): ParseResult {
   const diagram = emptyDiagram();
@@ -41,7 +45,9 @@ export function parseArchitecture(source: string): ParseResult {
   const declaredAt = new Map<string, number>();
   const edgeLines: number[] = [];
   const routes: { from: string; to: string; points: Point[] }[] = [];
+  const styles = new Map<string, NodeStyle>();
   let route: RegExpExecArray | null;
+  let styled: RegExpExecArray | null;
   let i = 0;
 
   // Optional YAML front matter; only `title` is interpreted.
@@ -83,6 +89,9 @@ export function parseArchitecture(source: string): ParseResult {
           });
         if (points.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y)))
           routes.push({ from: route[1]!, to: route[2]!, points });
+      } else if ((styled = STYLE_RE.exec(line))) {
+        const style = parseStyleTokens(styled[2] ?? '');
+        if (style) styles.set(styled[1]!, style);
       } else if (!/^%%\s*@/.test(line)) {
         diagram.comments.push(line.replace(/^%%\s?/, ''));
       }
@@ -158,6 +167,12 @@ export function parseArchitecture(source: string): ParseResult {
     if (!declaredAt.has(r.from) || !declaredAt.has(r.to)) continue;
     const edge = diagram.edges.find((e) => e.from === r.from && e.to === r.to && !e.route);
     if (edge) edge.route = r.points;
+  }
+
+  // Styles of nodes that no longer exist are dropped the same way.
+  for (const n of diagram.nodes) {
+    const s = styles.get(n.id);
+    if (s && n.kind !== 'junction') n.style = s;
   }
 
   return { diagram, errors };
@@ -236,13 +251,18 @@ export function serializeArchitecture(diagram: Diagram): string {
   const routed = diagram.edges
     .filter((e) => e.route?.length && byId.has(e.from) && byId.has(e.to))
     .sort((a, b) => cmp(a.from, b.from) || cmp(a.to, b.to));
-  if (positioned.length || routed.length) {
+  // Sorted by id, keys sorted too, so styles diff cleanly.
+  const styled = diagram.nodes
+    .filter((n) => n.kind !== 'junction' && formatStyle(n.style))
+    .sort((a, b) => cmp(a.id, b.id));
+  if (positioned.length || routed.length || styled.length) {
     out.push('', '  %% @layout opsdraw canvas positions (Mermaid ignores these lines)');
     for (const n of positioned) {
       const l = diagram.layout[n.id]!;
       const size = l.w !== undefined && l.h !== undefined ? ` ${round(l.w)} ${round(l.h)}` : '';
       out.push(`  %% @pos ${n.id} ${round(l.x)} ${round(l.y)}${size}`);
     }
+    for (const n of styled) out.push(`  %% @style ${n.id} ${formatStyle(n.style)}`);
     for (const e of routed) {
       const pts = e.route!.map((p) => `${round(p.x)},${round(p.y)}`).join(' ');
       out.push(`  %% @route ${e.from} ${e.to} ${pts}`);

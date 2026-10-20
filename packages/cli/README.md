@@ -4,15 +4,15 @@ Command line for OpsDraw: turn infrastructure-as-code into a Mermaid `architectu
 diagram, keep that diagram in sync in CI, and export it to SVG.
 
 Diagrams are plain `.mmd` files that render on GitHub and GitLab as-is. Canvas positions live in
-`%% @pos <id> x y [w h]` comment lines (and edge routes in `%% @route <from> <to> x,y ...` lines)
-that Mermaid ignores, so you can arrange a diagram in the OpsDraw app, commit it, and re-import
+`%% @pos <id> x y [w h]` comment lines (edge routes in `%% @route <from> <to> x,y ...` lines, colors
+in `%% @style <id> fill=<c> stroke=<c> color=<c>` lines) that Mermaid ignores, so you can arrange a diagram in the OpsDraw app, commit it, and re-import
 later without losing the layout.
 
 ## Commands
 
 ```sh
 opsdraw import <path...> -o <out.mmd> [--recursive] [--include-all] [--direction right|down] [--title T] [--check]
-opsdraw export <in.mmd> -o <out.svg> [--theme light|dark|auto]
+opsdraw export <in.mmd> -o <out.svg> [--theme light|dark|auto] [--legend]
 opsdraw validate <file.mmd...> [--strict]
 opsdraw diff <old.mmd> <new.mmd>
 opsdraw merge-driver <base> <ours> <theirs> [<path>]
@@ -59,6 +59,10 @@ laid out first). Mermaid built-in icons and `lucide:*` icons are drawn from the 
 set. Other icon packs (`aws:`, `azure:`, `gcp:`, ...) are not bundled and are drawn as dashed
 placeholders; the command prints a note listing them. The Mermaid source is embedded in the
 SVG's `<metadata>`, so the OpsDraw app can reopen it.
+
+`%% @style` colors (hex `#rgb`/`#rrggbb` or blue, green, orange, red, purple, gray, teal, yellow;
+anything else is ignored) are drawn on groups and services, and crossing edges get a small line
+jump. `--legend` adds a box listing the icons used and which groups each color marks.
 
 PNG export is not supported in the CLI yet; use the OpsDraw app.
 

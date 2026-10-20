@@ -25,6 +25,18 @@ export interface ArchNode {
   icon?: string;
   /** Id of the containing group, if any. */
   parent?: string;
+  /**
+   * Colors (stored as `%% @style`): `#rgb`/`#rrggbb` hex or a palette name (see `PALETTE_NAMES`).
+   * Presentation, like layout: never part of the structure.
+   */
+  style?: NodeStyle;
+}
+
+/** Per-node colors. `color` is the label text color. */
+export interface NodeStyle {
+  fill?: string;
+  stroke?: string;
+  color?: string;
 }
 
 export interface ArchEdge {

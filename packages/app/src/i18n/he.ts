@@ -14,6 +14,8 @@ const he: Messages = {
     layoutDown: 'פריסה אוטומטית ↓',
     iconPacks: 'חבילות אייקונים…',
     language: 'שפה',
+    legend: 'מקרא',
+    legendHint: 'הוספת מקרא של האייקונים והצבעים לייצוא SVG ו־PNG',
   },
   view: { canvas: 'קנבס', preview: 'תצוגה מקדימה של Mermaid' },
   palette: {
@@ -65,6 +67,18 @@ const he: Messages = {
     notSiblings: 'יישור פועל על צמתים באותה קבוצה. בחרו צמתים שיש להם אותו הורה.',
     distributeHint: 'בחרו שלושה צמתים או יותר כדי לפזר אותם.',
     nudgeHint: 'מקשי החצים מזיזים את הבחירה ב־8 פיקסלים; עם Shift ב־1 פיקסל.',
+    color: 'צבע',
+    resetColor: 'צבע ברירת מחדל',
+    colors: {
+      blue: 'כחול',
+      green: 'ירוק',
+      orange: 'כתום',
+      red: 'אדום',
+      purple: 'סגול',
+      gray: 'אפור',
+      teal: 'טורקיז',
+      yellow: 'צהוב',
+    },
   },
   editor: {
     errors_one: '{{count}} בעיה',

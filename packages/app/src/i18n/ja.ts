@@ -14,6 +14,8 @@ const ja: Messages = {
     layoutDown: '自動レイアウト ↓',
     iconPacks: 'アイコンパック…',
     language: '言語',
+    legend: '凡例',
+    legendHint: 'SVG と PNG のエクスポートに、使用しているアイコンと色の凡例を追加します',
   },
   view: { canvas: 'キャンバス', preview: 'Mermaid プレビュー' },
   palette: {
@@ -65,6 +67,18 @@ const ja: Messages = {
     notSiblings: '整列は同じグループ内のノードに使えます。親が同じノードを選択してください。',
     distributeHint: '等間隔に配置するには 3 個以上のノードを選択してください。',
     nudgeHint: '矢印キーで選択を 8 px 移動します。Shift を押すと 1 px です。',
+    color: '色',
+    resetColor: '既定の色',
+    colors: {
+      blue: '青',
+      green: '緑',
+      orange: 'オレンジ',
+      red: '赤',
+      purple: '紫',
+      gray: 'グレー',
+      teal: 'ティール',
+      yellow: '黄',
+    },
   },
   editor: {
     errors_one: '{{count}} 件の問題',

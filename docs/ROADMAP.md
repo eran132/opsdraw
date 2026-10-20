@@ -72,14 +72,18 @@ Legend: ✅ done · 🔜 next · 📋 planned
   inside their group and next to what they connect to, without overlaps, growing groups to fit
   (D2/TALA's headline feature).
 - ✅ **Edge routing:** ELK orthogonal routes saved as `%% @route` bend points, drawn on the
-  canvas and in exports, and dropped when an end moves (drawio#5772). 📋 Not done yet: line
-  jumps at crossings (Excalidraw#157).
+  canvas and in exports, and dropped when an end moves (drawio#5772).
+- ✅ **Line jumps:** exports draw a small hop where a horizontal edge segment crosses a vertical
+  one (Excalidraw#157).
 - ✅ **Large diagrams:** ELK in a Web Worker, render only visible nodes, debounced parsing, and a
   500-node benchmark in CI (drawio#3636, Excalidraw#628).
 - ✅ **Alignment tools:** snap guides, align/distribute, fast keyboard nudging.
-- 📋 **Styling:** `%% @style` comments for group colors (mermaid#6168), auto-generated legend.
-- 📋 **RTL polish:** bidi isolation in exported SVG text; scope `dir` to the app root so it can be
-  embedded (Excalidraw#11963).
+- ✅ **Styling:** `%% @style` comments for node and group colors (mermaid#6168), restricted to hex
+  and a theme-aware palette so files can't inject CSS; set from the inspector, kept by re-imports
+  and merged like layout by the git merge driver; optional legend in exports (`--legend`).
+- ✅ **RTL polish:** exported labels take their direction from the first strong character, like
+  `dir="auto"`, with bidi embedding; `dir` is set on the app root so it can be embedded
+  (Excalidraw#11963).
 
 ## Platform
 

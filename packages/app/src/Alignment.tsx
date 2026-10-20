@@ -16,6 +16,7 @@ import {
   type Rect,
 } from './align';
 import type { Selection } from './Canvas';
+import { ColorPicker } from './ColorPicker';
 
 interface Props {
   diagram: Diagram;
@@ -132,6 +133,7 @@ export function MultiSelection({ diagram, ids, onChange, onSelect }: Props) {
           nodes.length < 3 && <p className="muted small">{t('inspector.distributeHint')}</p>
         )}
       </div>
+      <ColorPicker diagram={diagram} ids={ids} onChange={onChange} />
       <p className="muted small">{t('inspector.nudgeHint')}</p>
       <button
         className="danger"

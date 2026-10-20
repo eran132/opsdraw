@@ -14,6 +14,8 @@ const ar: Messages = {
     layoutDown: 'تخطيط تلقائي ↓',
     iconPacks: 'حزم الأيقونات…',
     language: 'اللغة',
+    legend: 'وسيلة إيضاح',
+    legendHint: 'إضافة وسيلة إيضاح للأيقونات والألوان المستخدمة إلى تصدير SVG وPNG',
   },
   view: { canvas: 'لوحة الرسم', preview: 'معاينة Mermaid' },
   palette: {
@@ -65,6 +67,18 @@ const ar: Messages = {
     notSiblings: 'تعمل المحاذاة على العقد داخل المجموعة نفسها. حدّد عقدًا لها الأصل نفسه.',
     distributeHint: 'حدّد ثلاث عقد أو أكثر لتوزيعها.',
     nudgeHint: 'تحرّك مفاتيح الأسهم التحديد بمقدار 8 بكسل، ومع Shift بمقدار بكسل واحد.',
+    color: 'اللون',
+    resetColor: 'اللون الافتراضي',
+    colors: {
+      blue: 'أزرق',
+      green: 'أخضر',
+      orange: 'برتقالي',
+      red: 'أحمر',
+      purple: 'بنفسجي',
+      gray: 'رمادي',
+      teal: 'أزرق مخضر',
+      yellow: 'أصفر',
+    },
   },
   editor: {
     errors_one: '{{count}} مشكلة',

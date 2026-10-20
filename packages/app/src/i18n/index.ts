@@ -36,10 +36,16 @@ function initialLanguage(): string {
   return 'en';
 }
 
-export function applyDirection(lang: string) {
-  const rtl = LANGUAGES.some((l) => l.code === lang && 'rtl' in l && l.rtl);
+export const isRtlLanguage = (lang: string): boolean =>
+  LANGUAGES.some((l) => l.code === lang && 'rtl' in l && l.rtl);
+
+/**
+ * Keeps <html lang> in step for the browser (hyphenation, fonts, screen readers). The writing
+ * direction is set on the app root instead (see App), so the editor can be embedded in a page
+ * without flipping the host page.
+ */
+export function applyLanguage(lang: string) {
   document.documentElement.lang = lang;
-  document.documentElement.dir = rtl ? 'rtl' : 'ltr';
 }
 
 void i18n.use(initReactI18next).init({
@@ -49,10 +55,10 @@ void i18n.use(initReactI18next).init({
   interpolation: { escapeValue: false },
 });
 
-applyDirection(i18n.language);
+applyLanguage(i18n.language);
 i18n.on('languageChanged', (lang) => {
   storage.set('lang', lang);
-  applyDirection(lang);
+  applyLanguage(lang);
 });
 
 export default i18n;

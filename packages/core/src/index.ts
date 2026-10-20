@@ -13,6 +13,7 @@ export * from './tfjson';
 export * from './icons';
 export * from './layout';
 export * from './svg';
+export * from './style';
 export * from './png';
 
 import { parseArchitecture } from './mermaid';

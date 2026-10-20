@@ -1,12 +1,21 @@
 /**
- * File access. Uses the File System Access API where available (Chromium, and the Tauri webview
- * on Windows) so Save writes back to the same file and external edits (for example from the MCP
- * server) can be picked up. Elsewhere it falls back to upload/download.
+ * File access. In the desktop app it uses native dialogs and files (desktop.ts). In browsers it
+ * uses the File System Access API where available (Chromium) so Save writes back to the same
+ * file and external edits (for example from the MCP server) can be picked up. Elsewhere it falls
+ * back to upload/download.
  */
 
 import { PNG_SOURCE_KEYWORD, embedPngText, extractPngText, extractSvgSource } from '@opsdraw/core';
+import {
+  desktopHandle,
+  desktopOpen,
+  desktopPickFiles,
+  desktopSaveBlob,
+  desktopSavePath,
+  isDesktop,
+} from './desktop';
 
-interface FileHandle {
+export interface FileHandle {
   name: string;
   getFile(): Promise<File>;
   createWritable(): Promise<{ write(data: string | Blob): Promise<void>; close(): Promise<void> }>;
@@ -18,7 +27,7 @@ type PickerWindow = Window & {
 };
 
 const pickerWindow = window as PickerWindow;
-export const canWriteBack = typeof pickerWindow.showOpenFilePicker === 'function';
+export const canWriteBack = isDesktop || typeof pickerWindow.showOpenFilePicker === 'function';
 
 const MERMAID_TYPES = [
   { description: 'Mermaid', accept: { 'text/plain': ['.mmd', '.mermaid', '.md'] } },
@@ -61,6 +70,12 @@ export interface OpenedFile {
 }
 
 export async function openFile(): Promise<OpenedFile | null> {
+  if (isDesktop) {
+    const [path] = await desktopOpen('.mmd,.mermaid,.md,.svg,.png', false);
+    if (!path) return null;
+    const handle = desktopHandle(path);
+    return readDiagramFile(await handle.getFile(), handle);
+  }
   if (canWriteBack) {
     try {
       const [handle] = await pickerWindow.showOpenFilePicker!({ types: OPEN_TYPES });
@@ -81,7 +96,11 @@ export async function saveFile(
   name: string,
   handle?: FileHandle,
 ): Promise<{ handle?: FileHandle; name: string; lastModified: number } | null> {
-  if (!handle && canWriteBack && pickerWindow.showSaveFilePicker) {
+  if (!handle && isDesktop) {
+    const path = await desktopSavePath(name, ['mmd', 'mermaid']);
+    if (!path) return null;
+    handle = desktopHandle(path);
+  } else if (!handle && canWriteBack && pickerWindow.showSaveFilePicker) {
     try {
       handle = await pickerWindow.showSaveFilePicker({ suggestedName: name, types: MERMAID_TYPES });
     } catch (e) {
@@ -108,6 +127,7 @@ export async function readIfChanged(handle: FileHandle, since: number): Promise<
 }
 
 export function pickFiles(accept: string, multiple: boolean): Promise<File[]> {
+  if (isDesktop) return desktopPickFiles(accept, multiple);
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -120,6 +140,10 @@ export function pickFiles(accept: string, multiple: boolean): Promise<File[]> {
 }
 
 export function download(blob: Blob, name: string) {
+  if (isDesktop) {
+    void desktopSaveBlob(blob, name);
+    return;
+  }
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

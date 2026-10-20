@@ -229,6 +229,33 @@ describe('opsdraw export', () => {
     expect(opens).toBe(closes);
   });
 
+  it('adds a legend with --legend and draws %% @style colors', () => {
+    write(
+      'legend.mmd',
+      `architecture-beta
+  group vpc(cloud)[My VPC]
+  service web(server)[Web] in vpc
+  service db(database)[Orders]
+  web:R --> L:db
+  %% @pos vpc 0 0 200 200
+  %% @pos web 24 40
+  %% @pos db 300 40
+  %% @style vpc fill=teal stroke=teal
+`,
+    );
+    expect(cli('export', 'legend.mmd', '-o', 'plain.svg').code).toBe(0);
+    const plain = read('plain.svg');
+    expect(plain).not.toContain('class="legend"');
+    expect(plain).toContain('stroke:#0d9488');
+    const r = cli('export', 'legend.mmd', '-o', 'legend.svg', '--legend');
+    expect(r.code, r.stderr).toBe(0);
+    const svg = read('legend.svg');
+    expect(svg).toContain('class="legend"');
+    expect(svg).toContain('>Legend</text>');
+    expect(svg).toContain('>Orders</text>');
+    expect(svg).toMatch(/style="fill:#0f766e">My VPC<\/text>|>My VPC<\/text>/);
+  });
+
   it('refuses PNG and missing files', () => {
     const png = cli('export', 'exp.mmd', '-o', 'x.png');
     expect(png.code).toBe(2);

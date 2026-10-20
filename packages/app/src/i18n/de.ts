@@ -14,6 +14,8 @@ const de: Messages = {
     layoutDown: 'Auto-Layout ↓',
     iconPacks: 'Icon-Pakete…',
     language: 'Sprache',
+    legend: 'Legende',
+    legendHint: 'SVG- und PNG-Exporten eine Legende der verwendeten Symbole und Farben hinzufügen',
   },
   view: { canvas: 'Zeichenfläche', preview: 'Mermaid-Vorschau' },
   palette: {
@@ -66,6 +68,18 @@ const de: Messages = {
       'Ausrichten funktioniert für Knoten in derselben Gruppe. Wähle Knoten mit demselben übergeordneten Element aus.',
     distributeHint: 'Wähle mindestens drei Knoten aus, um sie zu verteilen.',
     nudgeHint: 'Pfeiltasten verschieben die Auswahl um 8 px, mit Umschalt um 1 px.',
+    color: 'Farbe',
+    resetColor: 'Standardfarbe',
+    colors: {
+      blue: 'Blau',
+      green: 'Grün',
+      orange: 'Orange',
+      red: 'Rot',
+      purple: 'Lila',
+      gray: 'Grau',
+      teal: 'Petrol',
+      yellow: 'Gelb',
+    },
   },
   editor: {
     errors_one: '{{count}} Problem',

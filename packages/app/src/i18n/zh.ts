@@ -14,6 +14,8 @@ const zh: Messages = {
     layoutDown: '自动布局 ↓',
     iconPacks: '图标包…',
     language: '语言',
+    legend: '图例',
+    legendHint: '在 SVG 和 PNG 导出中添加所用图标和颜色的图例',
   },
   view: { canvas: '画布', preview: 'Mermaid 预览' },
   palette: {
@@ -65,6 +67,18 @@ const zh: Messages = {
     notSiblings: '对齐只适用于同一分组内的节点。请选择父级相同的节点。',
     distributeHint: '选择三个或更多节点才能等距分布。',
     nudgeHint: '方向键将所选内容移动 8 px；按住 Shift 时移动 1 px。',
+    color: '颜色',
+    resetColor: '默认颜色',
+    colors: {
+      blue: '蓝色',
+      green: '绿色',
+      orange: '橙色',
+      red: '红色',
+      purple: '紫色',
+      gray: '灰色',
+      teal: '青色',
+      yellow: '黄色',
+    },
   },
   editor: {
     errors_one: '{{count}} 个问题',

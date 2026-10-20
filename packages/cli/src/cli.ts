@@ -39,7 +39,7 @@ const HELP = `opsdraw - architecture diagrams as code (Mermaid architecture-beta
 
 Usage:
   opsdraw import <path...> -o <out.mmd> [options]
-  opsdraw export <in.mmd> -o <out.svg> [--theme light|dark|auto]
+  opsdraw export <in.mmd> -o <out.svg> [--theme light|dark|auto] [--legend]
   opsdraw validate <file.mmd...> [--strict]
   opsdraw diff <old.mmd> <new.mmd>
   opsdraw merge-driver <base> <ours> <theirs> [<path>]
@@ -85,7 +85,7 @@ Options:
   -h, --help                Show this help.
 `;
 
-const EXPORT_HELP = `Usage: opsdraw export <in.mmd> -o <out.svg> [--theme light|dark|auto]
+const EXPORT_HELP = `Usage: opsdraw export <in.mmd> -o <out.svg> [--theme light|dark|auto] [--legend]
 
 Renders the diagram with its stored layout (nodes without a position are laid out first).
 Mermaid built-in and lucide: icons are drawn; other icon packs (aws:, azure:, ...) are not
@@ -94,6 +94,7 @@ bundled with the CLI and are drawn as placeholders. PNG is not supported in the 
 Options:
   -o, --output <file>   SVG file to write. Required.
       --theme <theme>   light (default), dark, or auto (follows prefers-color-scheme).
+      --legend          Add a legend of the icons and %% @style colors used.
   -h, --help            Show this help.
 `;
 
@@ -293,6 +294,7 @@ async function cmdExport(argv: string[], io: Io): Promise<number> {
     ...HELP_OPT,
     output: { type: 'string', short: 'o' },
     theme: { type: 'string', choices: ['light', 'dark', 'auto'] },
+    legend: { type: 'boolean' },
   });
   if (options.help) {
     io.stdout(EXPORT_HELP);
@@ -327,6 +329,7 @@ async function cmdExport(argv: string[], io: Io): Promise<number> {
   const svg = renderDiagramSvg(laidOut, {
     resolveIcon: icons.resolve,
     theme: (options.theme as Theme | undefined) ?? 'light',
+    legend: options.legend === true,
   });
   const outAbs = path.resolve(io.cwd, output);
   await writeFile(outAbs, svg);

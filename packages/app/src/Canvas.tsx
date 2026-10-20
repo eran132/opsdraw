@@ -95,7 +95,7 @@ function toFlowNodes(d: Diagram, selected: ReadonlySet<string>): ArchFlowNode[] 
       id: n.id,
       type: n.kind,
       position: { x: l.x, y: l.y },
-      data: { label: n.label ?? n.id, icon: n.icon },
+      data: { label: n.label ?? n.id, icon: n.icon, style: n.style },
       selected: selected.has(n.id),
     };
     if (n.parent && byId.has(n.parent)) node.parentId = n.parent;

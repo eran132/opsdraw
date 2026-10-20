@@ -20,7 +20,7 @@ import { Preview } from './Preview';
 import { resolveIcon } from './icons';
 import { layoutDiagram } from './layout';
 import { PackDialog } from './PackDialog';
-import { LANGUAGES } from './i18n';
+import { LANGUAGES, isRtlLanguage } from './i18n';
 import {
   NoEmbeddedSourceError,
   download,
@@ -53,6 +53,7 @@ export function App() {
   const [packsOpen, setPacksOpen] = useState(false);
   const [diskVersion, setDiskVersion] = useState<OpenedFile | null>(null);
   const [status, setStatus] = useState('');
+  const [legend, setLegend] = useState(false);
   const handle = useRef<Handle>(undefined);
   const lastModified = useRef(0);
   const undo = useRef<string[]>([]);
@@ -271,7 +272,12 @@ export function App() {
     const base = fileName.replace(/\.(mmd|mermaid|md)$/i, '');
     const theme = kind === 'svg' ? 'auto' : 'light';
     const current = flushParse() ?? diagram;
-    const svg = renderDiagramSvg(current, { resolveIcon, theme });
+    const svg = renderDiagramSvg(current, {
+      resolveIcon,
+      theme,
+      legend,
+      legendTitle: t('toolbar.legend'),
+    });
     if (kind === 'svg') download(new Blob([svg], { type: 'image/svg+xml' }), `${base}.svg`);
     else download(await svgToPngWithSource(svg, serializeArchitecture(current)), `${base}.png`);
   }
@@ -315,7 +321,8 @@ export function App() {
   });
 
   return (
-    <div className="app">
+    // Direction and language live on the app root, not <html>, so the editor can be embedded.
+    <div className="app" dir={isRtlLanguage(i18n.language) ? 'rtl' : 'ltr'} lang={i18n.language}>
       <header className="toolbar">
         <div className="brand">
           <img src="./favicon.svg" alt="" width={22} height={22} />
@@ -334,6 +341,10 @@ export function App() {
           <span className="sep" />
           <button onClick={() => void doExport('svg')}>{t('toolbar.exportSvg')}</button>
           <button onClick={() => void doExport('png')}>{t('toolbar.exportPng')}</button>
+          <label className="check" title={t('toolbar.legendHint')}>
+            <input type="checkbox" checked={legend} onChange={(e) => setLegend(e.target.checked)} />
+            {t('toolbar.legend')}
+          </label>
           <button onClick={() => setPacksOpen(true)}>{t('toolbar.iconPacks')}</button>
           <select
             aria-label={t('toolbar.language')}
@@ -426,7 +437,7 @@ export function App() {
       </ReactFlowProvider>
       <footer className="statusbar">
         <span role="status">{status}</span>
-        <span className="muted small">
+        <span className="muted small" dir="auto">
           Apache-2.0 · Vendor names and icons belong to their owners; OpsDraw is not affiliated with
           them.
         </span>

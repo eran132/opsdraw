@@ -1,6 +1,15 @@
-import type { ArchNode, Diagram, Point, Rect, Side } from './model';
+import type { ArchNode, Diagram, NodeStyle, Point, Rect, Side } from './model';
 import { GROUP_PADDING, JUNCTION_SIZE, SERVICE_SIZE } from './layout';
 import { serializeArchitecture } from './mermaid';
+import { parseIconRef } from './icons';
+import {
+  cssColor,
+  formatStyle,
+  paletteVars,
+  resolveColor,
+  sanitizeStyle,
+  type StyleKey,
+} from './style';
 
 /**
  * Renders a diagram to a standalone SVG from OpsDraw's own geometry (the `@pos` layout), so the
@@ -25,10 +34,18 @@ export interface SvgOptions {
   /** Embed the Mermaid source in <metadata> (default true). */
   embedSource?: boolean;
   padding?: number;
+  /** Add a box listing the icons and colors used (default false). */
+  legend?: boolean;
+  /** Heading of the legend box (default "Legend"). */
+  legendTitle?: string;
+  /** Draw a small hop where a horizontal edge segment crosses a vertical one (default true). */
+  lineJumps?: boolean;
 }
 
 export const SOURCE_METADATA_ID = 'opsdraw-source';
 const GROUP_DEFAULT = { w: 320, h: 220 };
+/** Radius of the hop drawn where edges cross. */
+export const JUMP_RADIUS = 5;
 
 const COLORS = {
   light: {
@@ -59,6 +76,19 @@ const escapeXml = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 const RTL_RE = /[\u0590-\u08ff\ufb1d-\ufdff\ufe70-\ufeff]/;
+const LETTER_RE = /\p{L}/u;
+
+/**
+ * Whether text reads right to left, by its first strong (letter) character, like `dir="auto"`.
+ * "API שרת" stays left to right; "שרת API" is right to left.
+ */
+export function isRtlText(text: string): boolean {
+  for (const ch of text) {
+    if (RTL_RE.test(ch)) return true;
+    if (LETTER_RE.test(ch)) return false;
+  }
+  return false;
+}
 
 /** Splits a label into at most `maxLines` lines of about `width` characters. */
 function wrap(text: string, width: number, maxLines: number): string[] {
@@ -82,10 +112,21 @@ function wrap(text: string, width: number, maxLines: number): string[] {
   return lines.map((l) => (l.length > width + 4 ? l.slice(0, width + 3) + '…' : l));
 }
 
-function textEl(text: string, x: number, y: number, cls: string, anchor = 'middle'): string {
+function textEl(
+  text: string,
+  x: number,
+  y: number,
+  cls: string,
+  anchor = 'middle',
+  style = '',
+): string {
   // Right-to-left labels get an explicit direction so they render correctly outside browsers.
-  const dir = RTL_RE.test(text) ? ' direction="rtl" unicode-bidi="embed"' : '';
-  return `<text x="${x}" y="${y}" class="${cls}" text-anchor="${anchor}"${dir}>${escapeXml(text)}</text>`;
+  // SVG 1.1 renderers know `embed` (not `isolate`); the label is the whole text run, so the
+  // embedding isolates it the same way. A start-anchored label keeps its left edge at `x`.
+  const rtl = isRtlText(text);
+  const dir = rtl ? ' direction="rtl" unicode-bidi="embed"' : '';
+  const a = rtl && anchor === 'start' ? 'end' : anchor;
+  return `<text x="${x}" y="${y}" class="${cls}" text-anchor="${a}"${dir}${style}>${escapeXml(text)}</text>`;
 }
 
 /**
@@ -196,14 +237,123 @@ export function polylinePath(pts: readonly Point[]) {
   return { d, labelAt: best };
 }
 
+/** A crossing where edge `edge`'s horizontal segment `segment` (from point `segment` to the next) hops. */
+export interface LineJump {
+  edge: number;
+  segment: number;
+  x: number;
+  y: number;
+}
+
+const EPS = 0.5;
+
+/** Drops repeated points and the middle points of straight runs, so each segment is maximal. */
+export function simplifyPolyline(pts: readonly Point[]): Point[] {
+  const out: Point[] = [];
+  for (const p of pts) {
+    const last = out[out.length - 1];
+    if (last && Math.abs(last.x - p.x) < EPS && Math.abs(last.y - p.y) < EPS) continue;
+    const prev = out[out.length - 2];
+    if (
+      prev &&
+      last &&
+      ((Math.abs(prev.x - last.x) < EPS && Math.abs(last.x - p.x) < EPS) ||
+        (Math.abs(prev.y - last.y) < EPS && Math.abs(last.y - p.y) < EPS))
+    )
+      out.pop();
+    out.push({ x: p.x, y: p.y });
+  }
+  return out;
+}
+
 /**
- * The drawn path of an edge: its stored route when it has one, otherwise an orthogonal elbow
+ * Where a horizontal segment of one polyline crosses a vertical segment of another, away from
+ * both segments' ends (touching, T-junctions and shared end points are not crossings). Hops
+ * closer than two radii to a segment end, or to another hop on the same segment, are left out,
+ * so every hop has room to be drawn. Sorted by edge, segment and travel direction.
+ */
+export function findLineJumps(
+  lines: readonly (readonly Point[])[],
+  radius = JUMP_RADIUS,
+): LineJump[] {
+  type Seg = { edge: number; segment: number; a: Point; b: Point };
+  const hs: Seg[] = [];
+  const vs: Seg[] = [];
+  lines.forEach((pts, edge) => {
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1]!;
+      const b = pts[i]!;
+      const dx = Math.abs(b.x - a.x);
+      const dy = Math.abs(b.y - a.y);
+      if (dy < EPS && dx >= EPS) hs.push({ edge, segment: i - 1, a, b });
+      else if (dx < EPS && dy >= EPS) vs.push({ edge, segment: i - 1, a, b });
+    }
+  });
+  const out: LineJump[] = [];
+  for (const h of hs) {
+    const y = h.a.y;
+    const x0 = Math.min(h.a.x, h.b.x);
+    const x1 = Math.max(h.a.x, h.b.x);
+    const xs: number[] = [];
+    for (const v of vs) {
+      if (v.edge === h.edge) continue;
+      const x = v.a.x;
+      const y0 = Math.min(v.a.y, v.b.y);
+      const y1 = Math.max(v.a.y, v.b.y);
+      if (x <= x0 + radius * 2 || x >= x1 - radius * 2) continue;
+      if (y <= y0 + EPS || y >= y1 - EPS) continue;
+      xs.push(x);
+    }
+    const forward = h.b.x >= h.a.x;
+    xs.sort((p, q) => (forward ? p - q : q - p));
+    let last: number | undefined;
+    for (const x of xs) {
+      if (last !== undefined && Math.abs(x - last) < radius * 2) continue;
+      out.push({ edge: h.edge, segment: h.segment, x, y });
+      last = x;
+    }
+  }
+  return out.sort((p, q) => p.edge - q.edge || p.segment - q.segment);
+}
+
+/**
+ * SVG path data for a polyline with a semicircular hop (always upwards) at each jump. `jumps`
+ * are the jumps of this polyline only, as returned by `findLineJumps`.
+ */
+export function jumpPath(
+  pts: readonly Point[],
+  jumps: readonly LineJump[],
+  radius = JUMP_RADIUS,
+): string {
+  if (!jumps.length) return polylinePath(pts).d;
+  const parts: string[] = [];
+  pts.forEach((pt, i) => {
+    if (i === 0) {
+      parts.push(`M${round(pt.x)} ${round(pt.y)}`);
+      return;
+    }
+    const prev = pts[i - 1]!;
+    const dir = pt.x >= prev.x ? 1 : -1;
+    for (const j of jumps) {
+      if (j.segment !== i - 1) continue;
+      parts.push(
+        `L${round(j.x - dir * radius)} ${round(j.y)}`,
+        `A${radius} ${radius} 0 0 ${dir > 0 ? 1 : 0} ${round(j.x + dir * radius)} ${round(j.y)}`,
+      );
+    }
+    parts.push(`L${round(pt.x)} ${round(pt.y)}`);
+  });
+  return parts.join(' ');
+}
+
+/**
+ * The drawn points of an edge: its stored route when it has one, otherwise an orthogonal elbow
  * leaving and entering perpendicular to the chosen sides.
  */
-function edgePath(a: Rect, as: Side, b: Rect, bs: Side, route?: readonly Point[]) {
+function edgePoints(a: Rect, as: Side, b: Rect, bs: Side, route?: readonly Point[]): Point[] {
   const p = anchor(a, as);
   const q = anchor(b, bs);
-  if (route?.length) return polylinePath(routePoints(p, as, route, q, bs));
+  if (route?.length) return routePoints(p, as, route, q, bs);
   const gap = 16;
   const p2 = { x: p.x + p.dx * gap, y: p.y + p.dy * gap };
   const q2 = { x: q.x + q.dx * gap, y: q.y + q.dy * gap };
@@ -220,10 +370,70 @@ function edgePath(a: Rect, as: Side, b: Rect, bs: Side, route?: readonly Point[]
     pts.push({ x: p2.x, y: q2.y });
   }
   pts.push(q2, { x: q.x, y: q.y });
-  return polylinePath(pts);
+  return pts;
 }
 
 const round = (v: number) => Math.round(v * 10) / 10;
+
+export interface LegendEntry {
+  kind: 'icon' | 'color';
+  label: string;
+  /** For `icon` entries: the icon reference. */
+  icon?: string;
+  /** For `color` entries: the (sanitized) style. */
+  style?: NodeStyle;
+}
+
+/** `lucide:list-ordered` -> "List ordered", `aws:Arch_Amazon-EC2` -> "Arch Amazon EC2". */
+export function humanizeIcon(ref: string): string {
+  const words = parseIconRef(ref).name.replace(/[-_]+/g, ' ').trim();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : ref;
+}
+
+const MAX_LEGEND_NAMES = 3;
+const joinNames = (names: string[]) =>
+  names.length > MAX_LEGEND_NAMES
+    ? `${names.slice(0, MAX_LEGEND_NAMES).join(', ')} +${names.length - MAX_LEGEND_NAMES}`
+    : names.join(', ');
+
+/**
+ * What a legend lists: each distinct icon (the node's label when only one node uses it, else the
+ * humanized icon name), then each distinct color, labelled with the groups that use it (or the
+ * nodes, when no group does). In order of first use.
+ */
+export function legendEntries(diagram: Diagram): LegendEntry[] {
+  const icons = new Map<string, ArchNode[]>();
+  const colors = new Map<string, { style: NodeStyle; nodes: ArchNode[] }>();
+  for (const n of diagram.nodes) {
+    if (n.kind === 'junction') continue;
+    if (n.icon) icons.set(n.icon, [...(icons.get(n.icon) ?? []), n]);
+    const style = sanitizeStyle(n.style);
+    if (style) {
+      const key = formatStyle(style);
+      const entry = colors.get(key) ?? { style, nodes: [] };
+      entry.nodes.push(n);
+      colors.set(key, entry);
+    }
+  }
+  const name = (n: ArchNode) => n.label || n.id;
+  const out: LegendEntry[] = [];
+  for (const [icon, nodes] of icons) {
+    out.push({
+      kind: 'icon',
+      icon,
+      label: nodes.length === 1 ? name(nodes[0]!) : humanizeIcon(icon),
+    });
+  }
+  for (const { style, nodes } of colors.values()) {
+    const groups = nodes.filter((n) => n.kind === 'group');
+    out.push({
+      kind: 'color',
+      style,
+      label: joinNames((groups.length ? groups : nodes).map(name)),
+    });
+  }
+  return out;
+}
 
 function themeCss(theme: Theme): string {
   const vars = (c: (typeof COLORS)['light']) =>
@@ -234,19 +444,44 @@ function themeCss(theme: Theme): string {
     `.group{fill:var(--group-bg);stroke:var(--group-border);stroke-dasharray:6 4}` +
     `.junction{fill:var(--muted)}.edge{fill:none;stroke:var(--edge);stroke-width:1.5}` +
     `.arrow{fill:var(--edge)}.icon{color:var(--text)}` +
-    `.label,.group-label,.edge-label{fill:var(--text);font-family:system-ui,-apple-system,'Segoe UI','Noto Sans','Noto Sans Hebrew','Noto Sans Arabic',sans-serif}` +
-    `.label{font-size:11px}.group-label{font-size:12px;font-weight:600}.edge-label{font-size:10px}` +
-    `.edge-label-bg{fill:var(--label-bg)}`;
+    `.label,.group-label,.edge-label,.legend-label,.legend-title{fill:var(--text);font-family:system-ui,-apple-system,'Segoe UI','Noto Sans','Noto Sans Hebrew','Noto Sans Arabic',sans-serif}` +
+    `.label,.legend-label{font-size:11px}.group-label,.legend-title{font-size:12px;font-weight:600}.edge-label{font-size:10px}` +
+    `.edge-label-bg{fill:var(--label-bg)}.legend{fill:var(--bg);stroke:var(--border)}`;
   if (theme === 'auto') {
-    return `svg{${vars(COLORS.light)}}@media (prefers-color-scheme: dark){svg{${vars(COLORS.dark)}}}${base}`;
+    return (
+      `svg{${vars(COLORS.light)}${paletteVars('light')}}` +
+      `@media (prefers-color-scheme: dark){svg{${vars(COLORS.dark)}${paletteVars('dark')}}}${base}`
+    );
   }
   return `svg{${vars(COLORS[theme])}}${base}`;
 }
 
+const LEGEND = { pad: 10, row: 22, title: 22, gap: 20 };
+
 export function renderDiagramSvg(diagram: Diagram, options: SvgOptions = {}): string {
-  const { resolveIcon, theme = 'light', embedSource = true, padding = 24 } = options;
+  const {
+    resolveIcon,
+    theme = 'light',
+    embedSource = true,
+    padding = 24,
+    legend = false,
+    legendTitle = 'Legend',
+    lineJumps = true,
+  } = options;
   const rects = absoluteRects(diagram);
   const byId = new Map(diagram.nodes.map((n) => [n.id, n]));
+
+  /** A theme-following color for a style value, validated again (the diagram may be hand-made). */
+  const paint = (value: string | undefined, role: StyleKey) =>
+    theme === 'auto' ? cssColor(value, role) : resolveColor(value, role, theme);
+  /** ` style="..."` from CSS properties whose values passed `paint` (hex, var(), our rgba). */
+  const styleAttr = (props: [string, string | undefined][]) => {
+    const css = props
+      .filter(([, v]) => v)
+      .map(([k, v]) => `${k}:${v}`)
+      .join(';');
+    return css ? ` style="${escapeXml(css)}"` : '';
+  };
 
   let minX = Infinity;
   let minY = Infinity;
@@ -271,6 +506,28 @@ export function renderDiagramSvg(diagram: Diagram, options: SvgOptions = {}): st
   if (!rects.size) [minX, minY, maxX, maxY] = [0, 0, 200, 100];
   // Leave room for labels below services.
   maxY += 8;
+
+  // The legend goes below the diagram, aligned with its left edge.
+  const entries = legend ? legendEntries(diagram) : [];
+  const legendBox = entries.length
+    ? {
+        x: minX,
+        y: maxY + LEGEND.gap,
+        w: Math.round(
+          Math.max(
+            legendTitle.length * 7.5,
+            ...entries.map((e) => Math.min(e.label.length, 48) * 6.4 + 26),
+          ) +
+            LEGEND.pad * 2,
+        ),
+        h: LEGEND.pad * 2 + LEGEND.title + entries.length * LEGEND.row - 4,
+      }
+    : null;
+  if (legendBox) {
+    maxX = Math.max(maxX, legendBox.x + legendBox.w);
+    maxY = legendBox.y + legendBox.h;
+  }
+
   const width = round(maxX - minX + padding * 2);
   const height = round(maxY - minY + padding * 2);
   const ox = padding - minX;
@@ -279,7 +536,7 @@ export function renderDiagramSvg(diagram: Diagram, options: SvgOptions = {}): st
   const icon = (ref: string | undefined, x: number, y: number, size: number) => {
     const data = ref ? resolveIcon?.(ref) : null;
     if (!data) {
-      return `<rect x="${x}" y="${y}" width="${size}" height="${size}" rx="4" fill="none" stroke="currentColor" stroke-dasharray="3 2" class="icon"/>`;
+      return `<rect x="${round(x)}" y="${round(y)}" width="${size}" height="${size}" rx="4" fill="none" stroke="currentColor" stroke-dasharray="3 2" class="icon"/>`;
     }
     const s = size / Math.max(data.width, data.height);
     return `<g class="icon" transform="translate(${round(x)} ${round(y)}) scale(${round(s * 1000) / 1000})">${data.body}</g>`;
@@ -317,22 +574,43 @@ export function renderDiagramSvg(diagram: Diagram, options: SvgOptions = {}): st
     .sort((a, b) => depth(a) - depth(b));
   for (const g of groups) {
     const r = rects.get(g.id)!;
+    const s = g.style;
     out.push(
-      `<g data-id="${escapeXml(g.id)}"><rect class="group" x="${round(r.x)}" y="${round(r.y)}" width="${round(r.w)}" height="${round(r.h)}" rx="12"/>`,
+      `<g data-id="${escapeXml(g.id)}"><rect class="group" x="${round(r.x)}" y="${round(r.y)}" width="${round(r.w)}" height="${round(r.h)}" rx="12"${styleAttr(
+        [
+          ['fill', paint(s?.fill, 'fill')],
+          ['stroke', paint(s?.stroke, 'stroke')],
+        ],
+      )}/>`,
     );
     const hasIcon = !!g.icon;
     if (hasIcon) out.push(icon(g.icon, r.x + 10, r.y + 9, 16));
     out.push(
-      textEl(g.label ?? g.id, r.x + (hasIcon ? 32 : 12), r.y + 21, 'group-label', 'start'),
+      textEl(
+        g.label ?? g.id,
+        round(r.x + (hasIcon ? 32 : 12)),
+        round(r.y + 21),
+        'group-label',
+        'start',
+        styleAttr([['fill', paint(s?.color, 'color')]]),
+      ),
       '</g>',
     );
   }
 
-  for (const e of diagram.edges) {
+  const drawn = diagram.edges.flatMap((e) => {
     const a = rects.get(e.from);
     const b = rects.get(e.to);
-    if (!a || !b) continue;
-    const { d, labelAt } = edgePath(a, e.fromSide, b, e.toSide, e.route);
+    return a && b ? [{ e, pts: edgePoints(a, e.fromSide, b, e.toSide, e.route) }] : [];
+  });
+  // Hops need whole segments: an elbow's collinear pieces would hide a crossing at their joint.
+  const lines = drawn.map((x) => simplifyPolyline(x.pts));
+  const jumps = lineJumps ? findLineJumps(lines) : [];
+  drawn.forEach(({ e, pts }, i) => {
+    const plain = polylinePath(pts);
+    const { labelAt } = plain;
+    const mine = jumps.filter((j) => j.edge === i);
+    const d = mine.length ? jumpPath(lines[i]!, mine) : plain.d;
     const markers =
       (e.arrowEnd ? ' marker-end="url(#opsdraw-arrow)"' : '') +
       (e.arrowStart ? ' marker-start="url(#opsdraw-arrow)"' : '');
@@ -344,7 +622,7 @@ export function renderDiagramSvg(diagram: Diagram, options: SvgOptions = {}): st
         textEl(e.label, round(labelAt.x), round(labelAt.y + 3.5), 'edge-label'),
       );
     }
-  }
+  });
 
   for (const n of diagram.nodes) {
     const r = rects.get(n.id)!;
@@ -355,13 +633,64 @@ export function renderDiagramSvg(diagram: Diagram, options: SvgOptions = {}): st
       continue;
     }
     if (n.kind !== 'service') continue;
+    const s = n.style;
+    const box = `x="${round(r.x)}" y="${round(r.y)}" width="${round(r.w)}" height="${round(r.h)}" rx="10"`;
+    const fill = paint(s?.fill, 'fill');
     out.push(
-      `<g data-id="${escapeXml(n.id)}"><rect class="node" x="${round(r.x)}" y="${round(r.y)}" width="${round(r.w)}" height="${round(r.h)}" rx="10"/>`,
-      icon(n.icon, r.x + (r.w - 40) / 2, r.y + 8, 40),
+      `<g data-id="${escapeXml(n.id)}"><rect class="node" ${box}${styleAttr([['stroke', paint(s?.stroke, 'stroke')]])}/>`,
     );
+    // Palette fills are translucent tints, so they go over the node's own background.
+    if (fill) out.push(`<rect ${box}${styleAttr([['fill', fill]])}/>`);
+    out.push(icon(n.icon, r.x + (r.w - 40) / 2, r.y + 8, 40));
+    const textStyle = styleAttr([['fill', paint(s?.color, 'color')]]);
     wrap(n.label ?? n.id, 16, 2).forEach((line, i) =>
-      out.push(textEl(line, round(r.x + r.w / 2), round(r.y + 62 + i * 13), 'label')),
+      out.push(
+        textEl(line, round(r.x + r.w / 2), round(r.y + 62 + i * 13), 'label', 'middle', textStyle),
+      ),
     );
+    out.push('</g>');
+  }
+
+  if (legendBox) {
+    const { x, y, w, h } = legendBox;
+    out.push(
+      `<g class="legend-box"><rect class="legend" x="${round(x)}" y="${round(y)}" width="${w}" height="${h}" rx="8"/>`,
+      textEl(
+        legendTitle,
+        round(x + LEGEND.pad),
+        round(y + LEGEND.pad + 12),
+        'legend-title',
+        'start',
+      ),
+    );
+    entries.forEach((entry, i) => {
+      const top = y + LEGEND.pad + LEGEND.title + i * LEGEND.row;
+      const label = entry.label.length > 48 ? `${entry.label.slice(0, 47)}…` : entry.label;
+      if (entry.kind === 'icon') out.push(icon(entry.icon, x + LEGEND.pad, top, 16));
+      else {
+        const s = entry.style;
+        out.push(
+          `<rect class="node" x="${round(x + LEGEND.pad)}" y="${round(top + 2)}" width="16" height="12" rx="3"${styleAttr(
+            [['stroke', paint(s?.stroke ?? s?.fill ?? s?.color, 'stroke')]],
+          )}/>`,
+        );
+        const fill = paint(s?.fill, 'fill');
+        if (fill)
+          out.push(
+            `<rect x="${round(x + LEGEND.pad)}" y="${round(top + 2)}" width="16" height="12" rx="3"${styleAttr([['fill', fill]])}/>`,
+          );
+      }
+      out.push(
+        textEl(
+          label,
+          round(x + LEGEND.pad + 24),
+          round(top + 12),
+          'legend-label',
+          'start',
+          entry.kind === 'color' ? styleAttr([['fill', paint(entry.style?.color, 'color')]]) : '',
+        ),
+      );
+    });
     out.push('</g>');
   }
 

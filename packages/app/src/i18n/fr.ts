@@ -14,6 +14,8 @@ const fr: Messages = {
     layoutDown: 'Disposition auto ↓',
     iconPacks: "Packs d'icônes…",
     language: 'Langue',
+    legend: 'Légende',
+    legendHint: 'Ajouter une légende des icônes et couleurs utilisées aux exports SVG et PNG',
   },
   view: { canvas: 'Canevas', preview: 'Aperçu Mermaid' },
   palette: {
@@ -66,6 +68,18 @@ const fr: Messages = {
       "L'alignement s'applique aux nœuds d'un même groupe. Sélectionnez des nœuds qui ont le même parent.",
     distributeHint: 'Sélectionnez au moins trois nœuds pour les répartir.',
     nudgeHint: 'Les flèches déplacent la sélection de 8 px ; avec Maj, de 1 px.',
+    color: 'Couleur',
+    resetColor: 'Couleur par défaut',
+    colors: {
+      blue: 'Bleu',
+      green: 'Vert',
+      orange: 'Orange',
+      red: 'Rouge',
+      purple: 'Violet',
+      gray: 'Gris',
+      teal: 'Sarcelle',
+      yellow: 'Jaune',
+    },
   },
   editor: {
     errors_one: '{{count}} problème',

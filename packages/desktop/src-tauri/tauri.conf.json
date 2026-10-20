@@ -1,0 +1,52 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "OpsDraw",
+  "version": "0.1.0",
+  "identifier": "dev.opsdraw.app",
+  "build": {
+    "beforeDevCommand": "npm run dev -w @opsdraw/app",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "npm run build -w @opsdraw/app",
+    "frontendDist": "../../app/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "OpsDraw",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 960,
+        "minHeight": 600
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:; connect-src 'self' ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "DeveloperTool",
+    "shortDescription": "Architecture as code",
+    "longDescription": "Draw architecture on a canvas or as Mermaid text, kept in sync. Import diagrams from Terraform, OpenTofu, Kubernetes, Proxmox and more.",
+    "copyright": "Copyright 2026 The OpsDraw contributors. Apache-2.0.",
+    "license": "Apache-2.0",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "fileAssociations": [
+      {
+        "ext": ["mmd", "mermaid"],
+        "name": "Mermaid diagram",
+        "description": "Mermaid architecture diagram",
+        "role": "Editor",
+        "mimeType": "text/vnd.mermaid"
+      }
+    ]
+  }
+}

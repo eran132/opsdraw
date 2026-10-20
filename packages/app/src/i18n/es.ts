@@ -14,6 +14,8 @@ const es: Messages = {
     layoutDown: 'Diseño automático ↓',
     iconPacks: 'Paquetes de iconos…',
     language: 'Idioma',
+    legend: 'Leyenda',
+    legendHint: 'Añadir una leyenda de los iconos y colores usados a las exportaciones SVG y PNG',
   },
   view: { canvas: 'Lienzo', preview: 'Vista previa de Mermaid' },
   palette: {
@@ -66,6 +68,18 @@ const es: Messages = {
       'La alineación funciona con nodos del mismo grupo. Selecciona nodos que compartan contenedor.',
     distributeHint: 'Selecciona tres nodos o más para distribuirlos.',
     nudgeHint: 'Las flechas mueven la selección 8 px; con Mayús, 1 px.',
+    color: 'Color',
+    resetColor: 'Color predeterminado',
+    colors: {
+      blue: 'Azul',
+      green: 'Verde',
+      orange: 'Naranja',
+      red: 'Rojo',
+      purple: 'Morado',
+      gray: 'Gris',
+      teal: 'Verde azulado',
+      yellow: 'Amarillo',
+    },
   },
   editor: {
     errors_one: '{{count}} problema',

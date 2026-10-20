@@ -270,11 +270,23 @@ test.describe('internationalization', () => {
   test('Hebrew switches the UI to right-to-left and keeps code left-to-right', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('combobox', { name: 'Language' }).selectOption('he');
-    await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+    // Direction is scoped to the app root, so the editor can be embedded in another page.
+    const app = page.locator('.app');
+    await expect(app).toHaveAttribute('dir', 'rtl');
+    await expect(app).toHaveAttribute('lang', 'he');
     await expect(page.locator('html')).toHaveAttribute('lang', 'he');
+    expect(await page.locator('html').getAttribute('dir')).toBeNull();
     await expect(page.locator('.editor-code')).toHaveAttribute('dir', 'ltr');
+    await expect(page.locator('.canvas')).toHaveAttribute('dir', 'ltr');
+    // The palette sits on the right in right-to-left layouts, the inspector on the left.
+    const palette = (await page.locator('.palette').boundingBox())!;
+    const inspector = (await page.locator('.inspector').boundingBox())!;
+    expect(palette.x).toBeGreaterThan(inspector.x);
+    await expect(page.getByRole('button', { name: 'ייצוא SVG' })).toBeVisible();
     await page.reload();
-    await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+    await expect(app).toHaveAttribute('dir', 'rtl');
+    await page.getByRole('combobox', { name: 'שפה' }).selectOption('en');
+    await expect(app).toHaveAttribute('dir', 'ltr');
   });
 });
 
@@ -543,5 +555,85 @@ test.describe('edge routes', () => {
     for (const r of routes.filter((x) => !stale.includes(x)))
       expect(after).toContain(`%% @route ${r.from} ${r.to} `);
     await expect(routed).toHaveCount(routes.length - stale.length);
+  });
+});
+
+test.describe('colors and legend', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'light' });
+  });
+
+  test('a swatch in the inspector writes %% @style and colors the group on the canvas', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await setEditorText(page, SIMPLE);
+    await expect(page.locator('.react-flow__node')).toHaveCount(3);
+    await canvasNode(page, 'VPC').locator('.arch-group-title').click();
+    await page.locator('.inspector').getByRole('button', { name: 'Teal' }).click();
+    await expect.poll(() => editorDoc(page)).toContain('%% @style vpc fill=teal stroke=teal');
+    const group = page.locator('.react-flow__node[data-id="vpc"] .arch-group');
+    await expect(group).toHaveCSS('border-top-color', 'rgb(13, 148, 136)');
+    await expect(page.locator('.inspector').getByRole('button', { name: 'Teal' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+
+    // Several nodes at once.
+    await canvasNode(page, 'Web').click();
+    await canvasNode(page, 'Orders DB').click({ modifiers: ['Shift'] });
+    await expect(page.locator('.inspector h2')).toHaveText('2 selected');
+    await page.locator('.inspector').getByRole('button', { name: 'Orange' }).click();
+    await expect.poll(() => editorDoc(page)).toContain('%% @style web fill=orange stroke=orange');
+    expect(await editorDoc(page)).toContain('%% @style db fill=orange stroke=orange');
+    await expect(page.locator('.react-flow__node[data-id="web"] .arch-service')).toHaveCSS(
+      'border-top-color',
+      'rgb(234, 88, 12)',
+    );
+
+    // Reset removes the line.
+    await canvasNode(page, 'VPC').locator('.arch-group-title').click();
+    await page.locator('.inspector').getByRole('button', { name: 'Default color' }).click();
+    await expect.poll(() => editorDoc(page)).not.toContain('%% @style vpc');
+  });
+
+  test('typed styles that are not allowed colors are ignored', async ({ page }) => {
+    await page.goto('/');
+    await setEditorText(
+      page,
+      SIMPLE + '  %% @style vpc fill=red;background:url(javascript:alert(1)) stroke=#ff0000\n',
+    );
+    await expect(page.locator('.react-flow__node')).toHaveCount(3);
+    const group = page.locator('.react-flow__node[data-id="vpc"] .arch-group');
+    await expect(group).toHaveCSS('border-top-color', 'rgb(255, 0, 0)');
+    const style = (await group.getAttribute('style')) ?? '';
+    expect(style).not.toContain('javascript');
+  });
+
+  test('SVG export adds a legend when asked', async ({ page }) => {
+    await page.goto('/');
+    await setEditorText(page, SIMPLE + '  %% @style vpc fill=purple stroke=purple\n');
+    await expect(page.locator('.react-flow__node')).toHaveCount(3);
+    const exportSvg = async () => {
+      const download = page.waitForEvent('download');
+      await page.getByRole('button', { name: 'Export SVG' }).click();
+      const file = await download;
+      const chunks: Buffer[] = [];
+      for await (const chunk of await file.createReadStream()) chunks.push(chunk as Buffer);
+      return Buffer.concat(chunks).toString('utf8');
+    };
+    const plain = await exportSvg();
+    expect(plain).not.toContain('class="legend"');
+    expect(plain).toContain('var(--pal-purple-stroke)');
+
+    const legend = page.getByRole('checkbox', { name: 'Legend' });
+    await expect(legend).not.toBeChecked();
+    await legend.check();
+    const svg = await exportSvg();
+    expect(svg).toContain('class="legend"');
+    expect(svg).toContain('>Legend</text>');
+    // Icons used once are listed by their node's label (VPC's cloud), the color by its group.
+    expect(svg).toContain('>Orders DB</text>');
+    expect(svg.split('>VPC</text>').length - 1).toBe(3);
   });
 });

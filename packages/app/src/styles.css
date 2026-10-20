@@ -146,7 +146,15 @@ input[aria-invalid='true'] {
   width: 1px;
   align-self: stretch;
   background: var(--border);
-  margin: 0 4px;
+  margin-inline: 4px;
+}
+
+.actions label.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  cursor: pointer;
 }
 
 .workspace {
@@ -206,6 +214,45 @@ input[aria-invalid='true'] {
   align-items: center;
   gap: 6px;
   color: var(--text);
+}
+
+.color-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.swatch {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 2px solid var(--border);
+  border-radius: 50%;
+}
+
+.swatch[aria-pressed='true'] {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.swatch-reset {
+  background:
+    linear-gradient(
+      135deg,
+      transparent calc(50% - 1px),
+      var(--muted) calc(50% - 1px),
+      var(--muted) calc(50% + 1px),
+      transparent calc(50% + 1px)
+    ),
+    var(--node-bg);
 }
 
 .field-error {

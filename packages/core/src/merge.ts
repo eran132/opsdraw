@@ -186,13 +186,19 @@ function chain(byId: ReadonlyMap<string, ArchNode>, id: string): string[] {
  *   changed: positions are relative to the parent, so a moved node gets a fresh position.
  * - An edge whose `from->to` pair exists in both keeps its previous sides, and its route when
  *   neither end (nor any group around them) moved.
+ * - A node that exists in both keeps its previous `%% @style` colors.
  * - Hub junctions that layout added for fan-out are kept, with their edges.
  * - The previous diagram's free-form comments are kept, and so is its title when `next` has none.
  *
  * Nodes without a position afterwards (new or re-parented) can be placed with `layoutNewNodes`.
  */
 export function mergeLayout(previous: Diagram, next: Diagram): MergeResult {
-  const nodes = next.nodes.map((n) => ({ ...n }));
+  const prevStyles = new Map(previous.nodes.map((n) => [n.id, n.style]));
+  // Colors are presentation, like positions: a re-import keeps them (unless next sets its own).
+  const nodes = next.nodes.map((n) => {
+    const style = n.style ?? prevStyles.get(n.id);
+    return style && n.kind !== 'junction' ? { ...n, style: { ...style } } : { ...n };
+  });
   const nextEdges = next.edges.map(({ route: _route, ...e }) => e as ArchEdge);
   restoreHubs(previous, nodes, nextEdges);
 

@@ -4,6 +4,7 @@ import { descendantsOf, isValidId, removeNode, renameNode, type Diagram } from '
 import type { Selection } from './Canvas';
 import { Icon } from './Icon';
 import { MultiSelection } from './Alignment';
+import { ColorPicker } from './ColorPicker';
 
 interface Props {
   diagram: Diagram;
@@ -137,6 +138,7 @@ export function Inspector({ diagram, selection, onChange, onSelect, focusLabel }
           </span>
         </label>
       )}
+      <ColorPicker diagram={diagram} ids={[node.id]} onChange={onChange} />
       <label>
         {t('inspector.parent')}
         <select

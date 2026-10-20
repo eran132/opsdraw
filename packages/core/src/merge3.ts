@@ -1,6 +1,7 @@
-import type { ArchEdge, ArchNode, Diagram, NodeLayout } from './model';
+import type { ArchEdge, ArchNode, Diagram, NodeLayout, NodeStyle } from './model';
 import { emptyDiagram } from './model';
 import { parseArchitecture, serializeArchitecture } from './mermaid';
+import { STYLE_KEYS, sanitizeStyle } from './style';
 
 /**
  * Semantic three-way merge of two versions of a diagram, for use as a git merge driver.
@@ -8,7 +9,8 @@ import { parseArchitecture, serializeArchitecture } from './mermaid';
  * Structure (nodes, edges, title) merges like source code: a change made on one side wins, and
  * the same field changed differently on both sides is a conflict (ours is kept). Layout never
  * conflicts: each node keeps the position (and, separately, the size) of the side that moved it,
- * and ours wins when both moved it. Edge sides and routes count as layout.
+ * and ours wins when both moved it. Edge sides and routes count as layout, and so do node
+ * styles (`%% @style`), merged per color key.
  *
  * `%% @<word> <id...> ...` lines the model does not understand (layout extensions written by
  * newer versions) are merged as opaque lines keyed by the word and the ids that follow it.
@@ -38,6 +40,8 @@ type Side = 'ours' | 'theirs';
 const KNOWN_DIAGRAM_KEYS = new Set(['title', 'nodes', 'edges', 'layout', 'comments']);
 /** Edge fields that are presentation, not structure: never a conflict. */
 const EDGE_LAYOUT_FIELDS = new Set(['fromSide', 'toSide', 'route']);
+/** Node fields that are presentation: `%% @style` colors. */
+const NODE_LAYOUT_FIELDS = new Set(['style']);
 
 /** JSON with sorted keys and undefined members dropped, for equality checks. */
 function canon(v: unknown): string {
@@ -137,6 +141,11 @@ function mergeFields<T extends object>(
   const out: Record<string, unknown> = {};
   const label = kind === 'node' ? 'Node' : 'Edge';
   for (const f of fields) {
+    if (f === 'style' && layoutFields.has(f)) {
+      const s = mergeStyle(rec(b)[f], rec(o)[f], rec(t)[f]);
+      if (s) out[f] = s;
+      continue;
+    }
     const r = pick(rec(b)[f], rec(o)[f], rec(t)[f]);
     if (r.value !== undefined) out[f] = r.value;
     if (r.conflict && !layoutFields.has(f)) {
@@ -151,6 +160,17 @@ function mergeFields<T extends object>(
     }
   }
   return out as T;
+}
+
+/** Styles merge per key (one side may change the fill while the other changes the text). */
+function mergeStyle(b: unknown, o: unknown, t: unknown): NodeStyle | undefined {
+  const rec = (x: unknown) => (x ?? {}) as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const k of STYLE_KEYS) {
+    const v = pick(rec(b)[k], rec(o)[k], rec(t)[k]).value;
+    if (v !== undefined) out[k] = v;
+  }
+  return sanitizeStyle(out);
 }
 
 const pairKey = (e: ArchEdge) => `${e.from}->${e.to}`;
@@ -302,7 +322,7 @@ export function merge3(base: string, ours: string, theirs: string): Merge3Result
   // Nodes.
   const nodeMap = (d: Diagram) => new Map(d.nodes.map((n) => [n.id, n]));
   const [bN, oN, tN] = [nodeMap(b!), nodeMap(o!), nodeMap(t!)];
-  const nodes = mergeEntities('node', bN, oN, tN, new Set(), conflicts);
+  const nodes = mergeEntities('node', bN, oN, tN, NODE_LAYOUT_FIELDS, conflicts);
 
   // Edges.
   const parallel = parallelPairs(b!, o!, t!);

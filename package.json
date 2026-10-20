@@ -9,7 +9,8 @@
     "packages/core",
     "packages/app",
     "packages/mcp",
-    "packages/cli"
+    "packages/cli",
+    "packages/desktop"
   ],
   "scripts": {
     "dev": "npm run dev -w @opsdraw/app",

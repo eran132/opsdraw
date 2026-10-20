@@ -12,6 +12,8 @@ const en = {
     layoutDown: 'Auto layout ↓',
     iconPacks: 'Icon packs…',
     language: 'Language',
+    legend: 'Legend',
+    legendHint: 'Add a legend of the icons and colors used to SVG and PNG exports',
   },
   view: { canvas: 'Canvas', preview: 'Mermaid preview' },
   palette: {
@@ -63,6 +65,18 @@ const en = {
     notSiblings: 'Aligning works on nodes inside the same group. Select nodes that share a parent.',
     distributeHint: 'Select three or more nodes to distribute them.',
     nudgeHint: 'Arrow keys move the selection by 8 px; hold Shift for 1 px.',
+    color: 'Color',
+    resetColor: 'Default color',
+    colors: {
+      blue: 'Blue',
+      green: 'Green',
+      orange: 'Orange',
+      red: 'Red',
+      purple: 'Purple',
+      gray: 'Gray',
+      teal: 'Teal',
+      yellow: 'Yellow',
+    },
   },
   editor: {
     errors_one: '{{count}} problem',
