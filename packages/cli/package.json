@@ -1,8 +1,31 @@
 {
   "name": "opsdraw",
   "version": "0.1.0",
-  "description": "OpsDraw command line: import infrastructure-as-code into Mermaid architecture diagrams, keep them in sync in CI, export SVG.",
+  "description": "Turn Terraform, OpenTofu, Kubernetes, Proxmox and other infrastructure code into Mermaid architecture diagrams, keep them in sync in CI, merge them in git and export SVG.",
+  "keywords": [
+    "architecture",
+    "diagram",
+    "diagrams-as-code",
+    "mermaid",
+    "terraform",
+    "opentofu",
+    "kubernetes",
+    "proxmox",
+    "devops",
+    "cli",
+    "github-action"
+  ],
   "license": "Apache-2.0",
+  "author": "Eran (https://github.com/eran132)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eran132/opsdraw.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/eran132/opsdraw#readme",
+  "bugs": {
+    "url": "https://github.com/eran132/opsdraw/issues"
+  },
   "type": "module",
   "bin": {
     "opsdraw": "dist/index.js"
@@ -27,5 +50,8 @@
     "@opsdraw/core": "0.1.0",
     "@types/node": "^22.0.0",
     "tsup": "^9.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

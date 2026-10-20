@@ -1,8 +1,29 @@
 {
   "name": "opsdraw-mcp",
   "version": "0.1.0",
-  "description": "MCP server for opsdraw: create and edit Mermaid architecture diagrams, import Terraform.",
+  "description": "MCP server for OpsDraw: let AI assistants create, edit, validate and lay out Mermaid architecture diagrams and import infrastructure code (Terraform, OpenTofu, Kubernetes, Proxmox and more).",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "architecture",
+    "diagram",
+    "mermaid",
+    "terraform",
+    "kubernetes",
+    "devops",
+    "claude"
+  ],
   "license": "Apache-2.0",
+  "author": "Eran (https://github.com/eran132)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eran132/opsdraw.git",
+    "directory": "packages/mcp"
+  },
+  "homepage": "https://github.com/eran132/opsdraw#readme",
+  "bugs": {
+    "url": "https://github.com/eran132/opsdraw/issues"
+  },
   "type": "module",
   "bin": {
     "opsdraw-mcp": "dist/index.js"
@@ -26,5 +47,11 @@
     "@opsdraw/core": "0.1.0",
     "@types/node": "^22.0.0",
     "tsup": "^9.0.0"
+  },
+  "engines": {
+    "node": ">=20.19"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
