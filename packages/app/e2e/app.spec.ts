@@ -880,6 +880,23 @@ test.describe('icon names', () => {
     await palette.getByRole('searchbox').fill('חומת אש');
     await expect(palette.locator('.tile').first()).toHaveAttribute('title', 'חומת אש');
   });
+
+  test('on-prem storage icons are in the palette and found by their keywords', async ({ page }) => {
+    await page.goto('/');
+    const palette = page.locator('.palette');
+    for (const title of ['Disk array', 'SAN', 'NAS', 'Tape library'])
+      await expect(palette.locator(`.tile[title="${title}"]`)).toBeVisible();
+    const search = palette.getByRole('searchbox');
+    for (const [query, title] of [
+      ['raid', 'Disk array'],
+      ['fibre channel', 'SAN'],
+      ['truenas', 'NAS'],
+      ['lto', 'Tape library'],
+    ] as const) {
+      await search.fill(query);
+      await expect(palette.locator('.tile').first()).toHaveAttribute('title', title);
+    }
+  });
 });
 
 test.describe('app bar, command palette and theme', () => {

@@ -62,6 +62,14 @@ export const GENERIC_CATALOG: IconCategory[] = [
     icons: [
       b('database', 'Database', 'database sql rds postgres mysql db'),
       b('disk', 'Disk', 'disk volume block storage ebs'),
+      l(
+        'rows-4',
+        'Disk array',
+        'disk array storage array raid shelf jbod enclosure netapp powerstore',
+      ),
+      l('layers-3', 'SAN', 'san storage area network fibre channel iscsi block storage pool lun'),
+      l('server-nas', 'NAS', 'nas network attached storage nfs smb cifs filer synology truenas'),
+      l('cassette-tape', 'Tape library', 'tape library lto backup archive vault'),
       l('archive', 'Object storage', 'object storage bucket blob s3 archive'),
       l('folder-tree', 'File share', 'file share nfs filesystem'),
       l('table', 'Data warehouse', 'warehouse analytics table'),
