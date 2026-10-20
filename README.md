@@ -105,14 +105,22 @@ On macOS, use Cmd instead of Ctrl. Canvas shortcuts apply while the canvas has f
 
 Moving nodes (dragging, aligning, nudging) re-picks the attachment sides of their edges, so two nodes lined up get a straight edge.
 
-### MCP server
+### Command line
+
+No install needed; npm runs it on demand:
 
 ```bash
-npm run build -w opsdraw-mcp
+npx opsdraw import infra --recursive -o docs/architecture.mmd
 ```
 
+Or install it globally with `npm install -g opsdraw`. See [packages/cli/README.md](packages/cli/README.md).
+
+### MCP server
+
+Give Claude Code (or any MCP client) the diagram tools:
+
 ```bash
-claude mcp add opsdraw -- node packages/mcp/dist/index.js
+claude mcp add opsdraw -- npx -y opsdraw-mcp
 ```
 
 See [packages/mcp/README.md](packages/mcp/README.md) for the full tool list and client configs.

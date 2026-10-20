@@ -8,6 +8,14 @@ Diagrams are plain `.mmd` files that render on GitHub and GitLab as-is. Canvas p
 in `%% @style <id> fill=<c> stroke=<c> color=<c>` lines) that Mermaid ignores, so you can arrange a diagram in the OpsDraw app, commit it, and re-import
 later without losing the layout.
 
+## Install
+
+```sh
+npm install -g opsdraw
+```
+
+Or run it without installing: `npx opsdraw <command>`. Requires Node.js 20.19 or newer.
+
 ## Commands
 
 ```sh
@@ -136,8 +144,8 @@ echo '*.mmd merge=opsdraw' >> .gitattributes
 echo '*.mermaid merge=opsdraw' >> .gitattributes
 ```
 
-When the CLI runs from a checkout of this repository rather than from npm (the CLI is not
-published yet), `--driver auto` (the default) writes a driver that calls that build directly,
+When the CLI runs from a checkout of this repository rather than from npm, `--driver auto`
+(the default) writes a driver that calls that build directly,
 for example `node "/path/to/opsdraw/packages/cli/dist/index.js" merge-driver %O %A %B %P`.
 Force either form with `--driver npx` or `--driver local`.
 
@@ -195,8 +203,8 @@ jobs:
 ```
 
 Inputs: `source` (one or more space-separated paths), `diagram`, `recursive` (default `false`)
-and `node-version` (default `22`). Until the CLI is published to npm, the action builds it from
-its own checkout.
+and `node-version` (default `22`). The action builds the CLI from its own checkout, so it always
+matches the action version you pin.
 
 When the check fails, the log shows what changed, for example:
 
@@ -214,7 +222,7 @@ opsdraw import infra --recursive -o docs/arch.mmd
 git add docs/arch.mmd && git commit -m "docs: update architecture diagram"
 ```
 
-Once the CLI is published to npm, the same check works without the action:
+The same check also works without the action:
 
 ```yaml
 - run: npx --yes opsdraw@latest import infra --recursive -o docs/arch.mmd --check
