@@ -43,7 +43,7 @@ async function selectNode(page: Page, label: string) {
 test.beforeEach(async ({ page }) => {
   // Start in English unless a test switched language (survives reloads within a test).
   await page.addInitScript(() => {
-    if (!localStorage.getItem('opsdraw:lang')) localStorage.setItem('opsdraw:lang', 'en');
+    if (!localStorage.getItem('opsdraw:language')) localStorage.setItem('opsdraw:language', 'en');
   });
 });
 
@@ -341,13 +341,33 @@ test.describe('internationalization', () => {
 
     test('starts in English until the user picks a language', async ({ page }) => {
       // Undo the suite's English seed so the app sees a first launch on a Hebrew system.
-      await page.addInitScript(() => localStorage.removeItem('opsdraw:lang'));
+      await page.addInitScript(() => localStorage.removeItem('opsdraw:language'));
       await page.goto('/');
       expect(await page.evaluate(() => navigator.language)).toBe('he-IL');
       const app = page.locator('.app');
       await expect(app).toHaveAttribute('lang', 'en');
       await expect(app).toHaveAttribute('dir', 'ltr');
       await expect(page.getByRole('combobox', { name: 'Language' })).toHaveValue('en');
+    });
+
+    test('ignores a language auto-saved by 0.1.3 and earlier, but remembers a real choice', async ({
+      page,
+    }) => {
+      await page.addInitScript(() => {
+        localStorage.removeItem('opsdraw:language');
+        // What older versions stored after detecting the system language.
+        if (!sessionStorage.getItem('seeded')) {
+          localStorage.setItem('opsdraw:lang', 'he');
+          sessionStorage.setItem('seeded', '1');
+        }
+      });
+      await page.goto('/');
+      const app = page.locator('.app');
+      await expect(app).toHaveAttribute('lang', 'en');
+      // Picking a language is saved and survives a reload.
+      await page.getByRole('combobox', { name: 'Language' }).selectOption('de');
+      await expect(app).toHaveAttribute('lang', 'de');
+      expect(await page.evaluate(() => localStorage.getItem('opsdraw:language'))).toBe('de');
     });
   });
 });

@@ -25,7 +25,7 @@ import { Preview } from './Preview';
 import { resolveIcon, searchIcons } from './icons';
 import { layoutDiagram } from './layout';
 import { PackDialog } from './PackDialog';
-import { LANGUAGES, isRtlLanguage } from './i18n';
+import { LANGUAGES, chooseLanguage, isRtlLanguage } from './i18n';
 import { AppBar, THEME_ICONS } from './AppBar';
 import { CommandPalette, type Command } from './CommandPalette';
 import { shortcut } from './Menu';
@@ -463,7 +463,7 @@ export function App() {
       group: settings,
       icon: 'languages',
       keywords: `language ${l.code}`,
-      run: () => void i18n.changeLanguage(l.code),
+      run: () => chooseLanguage(l.code),
     })),
     ...GENERIC_CATALOG.flatMap((cat) => cat.icons.map((i) => addCommand(i.ref, i.title))),
   ];

@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import type { LayoutDirection } from '@opsdraw/core';
-import { LANGUAGES } from './i18n';
+import { LANGUAGES, chooseLanguage } from './i18n';
 import { UiIcon } from './Icon';
 import { IS_MAC, MenuButton, shortcut } from './Menu';
 import { THEME_PREFERENCES, setThemePreference, useTheme } from './theme';
@@ -156,7 +156,7 @@ export function AppBar(p: Props) {
           <select
             aria-label={t('toolbar.language')}
             value={i18n.language}
-            onChange={(e) => void i18n.changeLanguage(e.target.value)}
+            onChange={(e) => chooseLanguage(e.target.value)}
           >
             {LANGUAGES.map((l) => (
               <option key={l.code} value={l.code}>

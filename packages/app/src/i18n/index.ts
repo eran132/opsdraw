@@ -23,13 +23,16 @@ export const LANGUAGES = [
 
 const resources = { en, he, ar, es, fr, de, ja, zh };
 const supported = LANGUAGES.map((l) => l.code as string);
+const LANGUAGE_KEY = 'language';
 
 /**
  * English unless the user picked another language in the app (saved on change). The system
  * language is deliberately not used: technical users often run a localized OS but work in English.
  */
 function initialLanguage(): string {
-  const saved = storage.get('lang');
+  // 'language', not the older 'lang' key: up to 0.1.3 the auto-detected system language was
+  // saved there as if the user had chosen it, so those values are ignored.
+  const saved = storage.get(LANGUAGE_KEY);
   return saved && supported.includes(saved) ? saved : 'en';
 }
 
@@ -53,9 +56,13 @@ void i18n.use(initReactI18next).init({
 });
 
 applyLanguage(i18n.language);
-i18n.on('languageChanged', (lang) => {
-  storage.set('lang', lang);
-  applyLanguage(lang);
-});
+i18n.on('languageChanged', applyLanguage);
+
+/** Switches the UI language because the user asked for it, and remembers the choice. */
+export function chooseLanguage(code: string) {
+  if (!supported.includes(code)) return;
+  storage.set(LANGUAGE_KEY, code);
+  void i18n.changeLanguage(code);
+}
 
 export default i18n;
