@@ -457,10 +457,19 @@ test.describe('arranging nodes', () => {
     const boxes = await Promise.all(
       ['Alpha', 'Beta', 'Gamma'].map(async (l) => (await canvasNode(page, l).boundingBox())!),
     );
-    const left = Math.min(...boxes.map((b) => b.x)) - 20;
-    const top = Math.min(...boxes.map((b) => b.y)) - 20;
-    const right = Math.max(...boxes.map((b) => b.x + b.width)) + 20;
-    const bottom = Math.max(...boxes.map((b) => b.y + b.height)) + 20;
+    // Keep the box inside the canvas: just outside it are the pane dividers and the editor, and
+    // how close the nodes sit to the edge depends on the platform's font metrics.
+    const pane = (await page.locator('.react-flow__pane').boundingBox())!;
+    const left = Math.max(Math.min(...boxes.map((b) => b.x)) - 20, pane.x + 4);
+    const top = Math.max(Math.min(...boxes.map((b) => b.y)) - 20, pane.y + 4);
+    const right = Math.min(
+      Math.max(...boxes.map((b) => b.x + b.width)) + 20,
+      pane.x + pane.width - 4,
+    );
+    const bottom = Math.min(
+      Math.max(...boxes.map((b) => b.y + b.height)) + 20,
+      pane.y + pane.height - 4,
+    );
     await page.keyboard.down('Shift');
     await page.mouse.move(left, top);
     await page.mouse.down();
