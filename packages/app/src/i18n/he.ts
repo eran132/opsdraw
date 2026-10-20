@@ -202,6 +202,30 @@ const he: Messages = {
     toggleTheme: 'מעבר בין מצב כהה לבהיר',
     showView: 'הצגת {{name}}',
   },
+  panes: {
+    menu: 'תצוגה',
+    name: { palette: 'לוח רכיבים', editor: 'עורך קוד', inspector: 'מאפיינים' },
+    show: { palette: 'הצגת לוח הרכיבים', editor: 'הצגת עורך הקוד', inspector: 'הצגת המאפיינים' },
+    hide: { palette: 'הסתרת לוח הרכיבים', editor: 'הסתרת עורך הקוד', inspector: 'הסתרת המאפיינים' },
+    toggle: {
+      palette: 'הצגה/הסתרה של לוח הרכיבים',
+      editor: 'הצגה/הסתרה של עורך הקוד',
+      inspector: 'הצגה/הסתרה של המאפיינים',
+    },
+    resize: {
+      palette: 'שינוי גודל לוח הרכיבים',
+      editor: 'שינוי גודל עורך הקוד',
+      inspector: 'שינוי גודל המאפיינים',
+    },
+    resizeHint: 'גררו או השתמשו במקשי החצים כדי לשנות גודל. לחיצה כפולה או Enter מכווצים ומשחזרים.',
+    editorPosition: 'מיקום עורך הקוד',
+    editorBeside: 'עורך הקוד לצד הקנבס',
+    editorAbove: 'עורך הקוד מעל הקנבס',
+    focus: 'מיקוד בקנבס',
+    exitFocus: 'יציאה ממצב מיקוד',
+    focusStatus: 'מצב מיקוד: הקישו Esc כדי להציג שוב את החלוניות.',
+    reset: 'איפוס הפריסה',
+  },
   status: { saved: 'נשמר', terraformImported: 'יובאו {{count}} משאבים' },
 };
 

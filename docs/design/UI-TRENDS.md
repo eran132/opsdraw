@@ -42,6 +42,18 @@ OpsDraw editor (`packages/app`). Tokens live in `packages/app/src/styles.css`.
 - **Panels.** Inspector sections with small uppercase headings (no letter-spacing for Hebrew,
   Arabic, Japanese, Chinese), Canvas/Mermaid preview as a segmented tab control, themed minimap and
   controls, selected nodes with an accent ring.
+- **Resizable layout.** Palette | code editor | stage | inspector as a CSS grid with logical columns,
+  so it mirrors in RTL. Between panels sits a 1px `border-subtle` divider with an 8px hit area that
+  shows a 3px `accent` bar on hover (after 150ms), focus (`focus`) and drag; it is an APG window
+  splitter (`role=separator` with `aria-valuenow`; arrows follow the screen, so moving toward the
+  stage enlarges a panel in either direction; Shift for 64px steps, Home/End, Enter or
+  double-click to collapse). Collapsed panels leave a 32px rail button with a vertical label.
+  Limits: palette 160–360px, inspector 200–420px, editor at least 220px, the stage never under
+  280×200px; small windows squeeze the editor first, and below 1100px the inspector starts as a
+  rail. The editor can sit beside or above the stage, focus mode hides every side panel (Esc
+  leaves it), and the layout is stored with the `storage` helper. Built in-house (`Workspace.tsx`,
+  `panes.ts`) rather than with a percentage-based panel library: pixel limits, rails and the RTL
+  drag direction needed custom handling anyway.
 - **Type and density.** System UI font stack (no web-font download, works offline in the desktop
   app), 11–16px scale, tabular numbers in the status bar, 48px app bar.
 - **Motion.** 100–160ms ease-out fades for menus, dialogs and tooltips; all of it is switched off

@@ -204,6 +204,39 @@ const fr: Messages = {
     toggleTheme: 'Basculer le mode sombre',
     showView: 'Afficher {{name}}',
   },
+  panes: {
+    menu: 'Affichage',
+    name: { palette: 'Palette', editor: 'Éditeur de code', inspector: 'Propriétés' },
+    show: {
+      palette: 'Afficher la palette',
+      editor: "Afficher l'éditeur de code",
+      inspector: 'Afficher les propriétés',
+    },
+    hide: {
+      palette: 'Masquer la palette',
+      editor: "Masquer l'éditeur de code",
+      inspector: 'Masquer les propriétés',
+    },
+    toggle: {
+      palette: 'Afficher/masquer la palette',
+      editor: "Afficher/masquer l'éditeur de code",
+      inspector: 'Afficher/masquer les propriétés',
+    },
+    resize: {
+      palette: 'Redimensionner la palette',
+      editor: "Redimensionner l'éditeur de code",
+      inspector: 'Redimensionner les propriétés',
+    },
+    resizeHint:
+      'Faites glisser ou utilisez les flèches pour redimensionner. Double-clic ou Entrée pour réduire ou restaurer.',
+    editorPosition: "Position de l'éditeur de code",
+    editorBeside: 'Éditeur de code à côté du canevas',
+    editorAbove: 'Éditeur de code au-dessus du canevas',
+    focus: 'Mode concentration',
+    exitFocus: 'Quitter le mode concentration',
+    focusStatus: 'Mode concentration : appuyez sur Échap pour réafficher les panneaux.',
+    reset: 'Réinitialiser la disposition',
+  },
   status: { saved: 'Enregistré', terraformImported: '{{count}} ressources importées' },
 };
 

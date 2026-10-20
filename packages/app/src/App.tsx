@@ -32,6 +32,17 @@ import { shortcut } from './Menu';
 import { UiIcon } from './Icon';
 import { THEME_PREFERENCES, setThemePreference, useTheme } from './theme';
 import {
+  PANE_IDS,
+  getPanes,
+  resetLayout,
+  setEditorPosition,
+  setFocusMode,
+  togglePane,
+  usePanes,
+  type PaneId,
+} from './panes';
+import { FocusToggle, PANE_SHORTCUTS, PaneToggle, Workspace } from './Workspace';
+import {
   NoEmbeddedSourceError,
   download,
   openFile,
@@ -342,7 +353,16 @@ export function App() {
 
   const actions = t('commands.groupActions');
   const settings = t('commands.groupSettings');
+  const viewGroup = t('panes.menu');
   const theme = useTheme();
+  const panes = usePanes();
+
+  // Say how to get out of focus mode when entering it.
+  const focusStatus = t('panes.focusStatus');
+  useEffect(() => {
+    if (panes.layout.focus) setStatus(focusStatus);
+    else setStatus((s) => (s === focusStatus ? '' : s));
+  }, [panes.layout.focus, focusStatus]);
   const commands: Command[] = [
     { id: 'new', label: t('toolbar.new'), group: actions, icon: 'file-plus', run: doNew },
     {
@@ -433,6 +453,48 @@ export function App() {
       keywords: 'mermaid preview',
       run: () => setView('preview'),
     },
+    ...PANE_IDS.map((id): Command => ({
+      id: `toggle-${id}`,
+      label: t(`panes.toggle.${id}`),
+      group: viewGroup,
+      icon: PANE_COMMAND_ICONS[id],
+      shortcut: shortcut(PANE_SHORTCUTS[id]),
+      keywords: 'panel pane show hide collapse layout',
+      run: () => togglePane(id),
+    })),
+    {
+      id: 'focus-canvas',
+      label: panes.layout.focus ? t('panes.exitFocus') : t('panes.focus'),
+      group: viewGroup,
+      icon: panes.layout.focus ? 'minimize' : 'maximize',
+      shortcut: panes.layout.focus ? 'Esc' : shortcut(PANE_SHORTCUTS.focus),
+      keywords: 'focus zen fullscreen maximize canvas layout',
+      run: () => setFocusMode(!panes.layout.focus),
+    },
+    {
+      id: 'editor-beside',
+      label: t('panes.editorBeside'),
+      group: viewGroup,
+      icon: 'columns-2',
+      keywords: 'layout split horizontal side',
+      run: () => setEditorPosition('beside'),
+    },
+    {
+      id: 'editor-above',
+      label: t('panes.editorAbove'),
+      group: viewGroup,
+      icon: 'rows-2',
+      keywords: 'layout split vertical top',
+      run: () => setEditorPosition('above'),
+    },
+    {
+      id: 'reset-layout',
+      label: t('panes.reset'),
+      group: viewGroup,
+      icon: 'rotate-ccw',
+      keywords: 'layout panels sizes default',
+      run: resetLayout,
+    },
     {
       id: 'icon-packs',
       label: t('toolbar.iconPacks'),
@@ -481,9 +543,21 @@ export function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey;
+      if (e.key === 'Escape' && !mod && !e.defaultPrevented && getPanes().layout.focus) {
+        // Menus and dialogs handle Escape themselves first.
+        if (document.querySelector('dialog[open], [role=menu]')) return;
+        e.preventDefault();
+        setFocusMode(false);
+        return;
+      }
       if (!mod) return;
       const key = e.key.toLowerCase();
-      if (key === 'k' && !e.shiftKey && !e.altKey) {
+      const pane = paneShortcut(e);
+      if (pane) {
+        e.preventDefault();
+        if (pane === 'focus') setFocusMode(!getPanes().layout.focus);
+        else togglePane(pane);
+      } else if (key === 'k' && !e.shiftKey && !e.altKey) {
         e.preventDefault();
         setCommandsOpen((open) => !open);
       } else if (key === 's') {
@@ -547,45 +621,61 @@ export function App() {
 
       {/* One React Flow store for the canvas and the inspector (which measures nodes to align them). */}
       <ReactFlowProvider>
-        <main className="workspace">
-          <Palette onPick={pickIcon} />
-          <Editor
-            text={text}
-            errors={errors}
-            onChange={onType}
-            onBlur={flushParse}
-            isFlowchart={isFlowchart}
-            onConvert={() => void doConvert()}
-          />
-          <section className="stage">
-            <div className="stage-bar">
-              <ViewTabs view={view} onView={setView} />
-            </div>
-            {view === 'canvas' ? (
-              <Canvas
-                diagram={diagram}
-                onChange={editDiagram}
-                selection={selection}
-                onSelect={setSelection}
-                fitKey={fitKey}
-                onEditLabel={() => setFocusLabel((n) => n + 1)}
-              />
-            ) : (
-              <Preview
-                text={text}
-                diagram={isFlowchart ? undefined : diagram}
-                onChange={editDiagram}
-              />
-            )}
-          </section>
-          <Inspector
-            diagram={diagram}
-            selection={selection}
-            onChange={editDiagram}
-            onSelect={setSelection}
-            focusLabel={focusLabel}
-          />
-        </main>
+        <Workspace
+          palette={<Palette onPick={pickIcon} />}
+          editor={
+            <Editor
+              text={text}
+              errors={errors}
+              onChange={onType}
+              onBlur={flushParse}
+              isFlowchart={isFlowchart}
+              onConvert={() => void doConvert()}
+            />
+          }
+          stage={
+            <section className="stage">
+              <div className="stage-bar">
+                <span className="stage-bar-group tip-start">
+                  <PaneToggle id="palette" />
+                  <PaneToggle id="editor" />
+                </span>
+                <span className="stage-bar-divider" />
+                <ViewTabs view={view} onView={setView} />
+                <span className="stage-bar-spacer" />
+                <span className="stage-bar-group tip-end">
+                  <FocusToggle />
+                  <PaneToggle id="inspector" />
+                </span>
+              </div>
+              {view === 'canvas' ? (
+                <Canvas
+                  diagram={diagram}
+                  onChange={editDiagram}
+                  selection={selection}
+                  onSelect={setSelection}
+                  fitKey={fitKey}
+                  onEditLabel={() => setFocusLabel((n) => n + 1)}
+                />
+              ) : (
+                <Preview
+                  text={text}
+                  diagram={isFlowchart ? undefined : diagram}
+                  onChange={editDiagram}
+                />
+              )}
+            </section>
+          }
+          inspector={
+            <Inspector
+              diagram={diagram}
+              selection={selection}
+              onChange={editDiagram}
+              onSelect={setSelection}
+              focusLabel={focusLabel}
+            />
+          }
+        />
         <ViewCenter target={viewCenter} />
       </ReactFlowProvider>
       <footer className="statusbar">
@@ -605,6 +695,27 @@ export function App() {
       )}
     </div>
   );
+}
+
+const PANE_COMMAND_ICONS: Record<PaneId, string> = {
+  palette: 'panel-left',
+  editor: 'code-xml',
+  inspector: 'panel-right',
+};
+
+/**
+ * Layout shortcuts: Ctrl+B palette, Ctrl+\ code editor, Ctrl+. properties, Ctrl+Shift+F focus
+ * mode. Matched on the physical key too, so they work in other keyboard layouts.
+ */
+function paneShortcut(e: KeyboardEvent): PaneId | 'focus' | null {
+  if (e.altKey) return null;
+  const key = e.key.toLowerCase();
+  if (e.shiftKey)
+    return key === 'f' || (!/^[a-z]$/.test(key) && e.code === 'KeyF') ? 'focus' : null;
+  if (key === 'b' || (!/^[a-z]$/.test(key) && e.code === 'KeyB')) return 'palette';
+  if (key === '\\' || e.code === 'Backslash') return 'editor';
+  if (key === '.' || e.code === 'Period') return 'inspector';
+  return null;
 }
 
 type View = 'canvas' | 'preview';
@@ -644,7 +755,7 @@ function ViewTabs({ view, onView }: { view: View; onView(v: View): void }) {
           onKeyDown={onKeyDown}
         >
           <UiIcon name={v === 'canvas' ? 'layout-grid' : 'scan-search'} />
-          {t(v === 'canvas' ? 'view.canvas' : 'view.preview')}
+          <span className="tab-label">{t(v === 'canvas' ? 'view.canvas' : 'view.preview')}</span>
         </button>
       ))}
     </div>

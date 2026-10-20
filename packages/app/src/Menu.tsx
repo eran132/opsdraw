@@ -19,6 +19,7 @@ export type MenuEntry =
       checked: boolean;
       /** Longer explanation, shown as a tooltip. */
       hint?: string;
+      shortcut?: string;
       onSelect(): void;
     }
   | { type: 'radio'; id: string; label: string; icon?: string; checked: boolean; onSelect(): void }
@@ -211,7 +212,7 @@ export function MenuButton({
                     {entry.checked && <UiIcon name="check" />}
                   </span>
                 )}
-                {entry.type !== 'checkbox' && entry.type !== 'radio' && entry.shortcut && (
+                {entry.type !== 'radio' && entry.shortcut && (
                   <kbd className="menu-item-shortcut" dir="ltr">
                     {entry.shortcut}
                   </kbd>

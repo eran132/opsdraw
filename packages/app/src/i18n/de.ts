@@ -204,6 +204,39 @@ const de: Messages = {
     toggleTheme: 'Dunkelmodus umschalten',
     showView: '{{name}} anzeigen',
   },
+  panes: {
+    menu: 'Ansicht',
+    name: { palette: 'Palette', editor: 'Code-Editor', inspector: 'Eigenschaften' },
+    show: {
+      palette: 'Palette einblenden',
+      editor: 'Code-Editor einblenden',
+      inspector: 'Eigenschaften einblenden',
+    },
+    hide: {
+      palette: 'Palette ausblenden',
+      editor: 'Code-Editor ausblenden',
+      inspector: 'Eigenschaften ausblenden',
+    },
+    toggle: {
+      palette: 'Palette ein-/ausblenden',
+      editor: 'Code-Editor ein-/ausblenden',
+      inspector: 'Eigenschaften ein-/ausblenden',
+    },
+    resize: {
+      palette: 'Größe der Palette ändern',
+      editor: 'Größe des Code-Editors ändern',
+      inspector: 'Größe der Eigenschaften ändern',
+    },
+    resizeHint:
+      'Ziehen oder mit den Pfeiltasten die Größe ändern. Doppelklick oder Eingabe zum Ein- und Ausklappen.',
+    editorPosition: 'Position des Code-Editors',
+    editorBeside: 'Code-Editor neben der Zeichenfläche',
+    editorAbove: 'Code-Editor über der Zeichenfläche',
+    focus: 'Zeichenfläche fokussieren',
+    exitFocus: 'Fokusmodus beenden',
+    focusStatus: 'Fokusmodus: Esc blendet die Bereiche wieder ein.',
+    reset: 'Layout zurücksetzen',
+  },
   status: { saved: 'Gespeichert', terraformImported: '{{count}} Ressourcen importiert' },
 };
 

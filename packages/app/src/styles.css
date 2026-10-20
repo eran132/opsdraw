@@ -367,6 +367,12 @@ button.danger:hover:not(:disabled) {
   transform: none;
 }
 
+.tip-start [data-tooltip]:hover::after,
+.tip-start [data-tooltip]:focus-visible::after {
+  inset-inline-start: 0;
+  transform: none;
+}
+
 @keyframes tooltip-in {
   from {
     opacity: 0;
@@ -471,8 +477,17 @@ input[aria-invalid='true'] {
 
 .app {
   display: grid;
-  grid-template-rows: auto auto 1fr auto;
+  /* App bar, optional banner, workspace, status bar (rows are fixed so a missing banner is fine). */
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   height: 100%;
+}
+
+.app > .workspace {
+  grid-row: 3;
+}
+
+.app > .statusbar {
+  grid-row: 4;
 }
 
 .appbar {
@@ -704,10 +719,174 @@ input[aria-invalid='true'] {
 
 /* ---------- Workspace and panels ---------- */
 
+/* Columns and rows are set inline by Workspace.tsx from the stored layout (logical, so RTL mirrors). */
 .workspace {
   display: grid;
-  grid-template-columns: 224px minmax(260px, 34%) 1fr 256px;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.workspace.resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+
+.workspace.resizing-y {
+  cursor: row-resize;
+}
+
+/* While a splitter is dragged, the canvas and editor must not grab the pointer. */
+.workspace.resizing .pane {
+  pointer-events: none;
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pane[hidden] {
+  display: none;
+}
+
+.pane > * {
+  flex: 1;
+  min-height: 0;
+}
+
+/*
+ * Splitter: the 1px divider between panels, with an 8px hit area. A 3px accent bar shows on hover
+ * (after a short delay, so it does not flicker while the pointer passes), on focus and while
+ * dragging.
+ */
+.splitter {
+  position: relative;
+  z-index: 5;
+  background: var(--border-subtle);
+  touch-action: none;
+  outline: none;
+}
+
+.splitter::before {
+  content: '';
+  position: absolute;
+  inset: 0 -4px;
+}
+
+.splitter-x {
+  cursor: col-resize;
+}
+
+.splitter-y {
+  cursor: row-resize;
+}
+
+.splitter-y::before {
+  inset: -4px 0;
+}
+
+.splitter::after {
+  content: '';
+  position: absolute;
+  inset: 0 -1px;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity var(--duration) var(--ease-out);
+  pointer-events: none;
+}
+
+.splitter-y::after {
+  inset: -1px 0;
+}
+
+.splitter:hover::after {
+  opacity: 1;
+  transition-delay: 150ms;
+}
+
+.splitter.dragging::after,
+.splitter:focus-visible::after {
+  opacity: 1;
+  transition-delay: 0ms;
+}
+
+.splitter:focus-visible::after {
+  background: var(--focus);
+}
+
+/* A collapsed panel leaves a rail: one big button that brings the panel back. */
+.pane-rail {
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: var(--space-2);
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+  padding: var(--space-3) 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--surface);
+  box-shadow: none;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+.pane-rail:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.pane-rail:active:not(:disabled) {
+  transform: none;
+}
+
+.pane-rail:focus-visible {
+  outline-offset: -2px;
+}
+
+.pane-rail-x .pane-rail-label {
+  writing-mode: vertical-rl;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Right-to-left labels turn the other way, so they also read from the top. */
+[dir='rtl'] .pane-rail-x .pane-rail-label {
+  transform: rotate(180deg);
+}
+
+.pane-rail-y {
+  flex-direction: row;
+  padding: 0 var(--space-3);
+}
+
+/* Rail tooltips open beside the rail, toward the stage. */
+.pane-rail-x[data-tooltip]:hover::after,
+.pane-rail-x[data-tooltip]:focus-visible::after {
+  top: var(--space-2);
+  inset-inline-start: calc(100% + 6px);
+  transform: none;
+}
+
+.pane-rail-end[data-tooltip]:hover::after,
+.pane-rail-end[data-tooltip]:focus-visible::after {
+  inset-inline-start: auto;
+  inset-inline-end: calc(100% + 6px);
+}
+
+[dir='rtl'] .flip-rtl {
+  display: inline-flex;
+  transform: scaleX(-1);
+}
+
+.flip-rtl {
+  display: inline-flex;
 }
 
 .palette,
@@ -717,17 +896,12 @@ input[aria-invalid='true'] {
   padding: var(--space-3);
 }
 
-.palette {
-  border-inline-end: 1px solid var(--border-subtle);
-}
-
 .palette > p.small {
   margin: var(--space-2) 2px 0;
   line-height: 1.4;
 }
 
 .inspector {
-  border-inline-start: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -936,7 +1110,6 @@ input[aria-invalid='true'] {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border-inline-end: 1px solid var(--border-subtle);
   background: var(--surface);
 }
 
@@ -1015,20 +1188,82 @@ input[aria-invalid='true'] {
   min-width: 0;
   min-height: 0;
   background: var(--bg);
+  container-type: inline-size;
 }
 
 .stage-bar {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  padding: 6px var(--space-2);
+  gap: var(--space-1);
+  min-width: 0;
+  padding: 4px var(--space-2);
   border-bottom: 1px solid var(--border-subtle);
   background: var(--surface);
+}
+
+.stage-bar-divider {
+  width: 1px;
+  height: 20px;
+  margin-inline: var(--space-1);
+  background: var(--border-subtle);
+  flex: none;
+}
+
+.stage-bar-spacer {
+  flex: 1;
+}
+
+.stage-bar-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.pane-toggle {
+  color: var(--text-muted);
+  min-height: 30px;
+  width: 30px;
+}
+
+.pane-toggle:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.pane-toggle[aria-pressed='true'] {
+  color: var(--accent-text);
 }
 
 .tabs > [role='tab'] {
   font-size: var(--text-sm);
   padding-inline: 10px;
+}
+
+.stage-bar .tabs {
+  min-width: 0;
+}
+
+.stage-bar .tabs > [role='tab'] {
+  min-width: 0;
+  flex-shrink: 1;
+}
+
+.tab-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* In a narrow stage the view tabs keep only their icons (the label stays for screen readers). */
+@container (max-width: 420px) {
+  .tabs .tab-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
 }
 
 .canvas,
@@ -1420,19 +1655,6 @@ input[aria-invalid='true'] {
     min-width: 0;
   }
   .command-trigger-label {
-    display: none;
-  }
-}
-
-@media (max-width: 1100px) {
-  .workspace {
-    grid-template-columns: 180px 1fr;
-    grid-template-rows: 40% 1fr;
-  }
-  .palette {
-    grid-row: 1 / 3;
-  }
-  .inspector {
     display: none;
   }
 }

@@ -1083,3 +1083,339 @@ test.describe('app bar, command palette and theme', () => {
     expect(focused.width).toBe('2px');
   });
 });
+
+test.describe('resizable panels', () => {
+  const pane = (page: Page, id: 'palette' | 'editor' | 'inspector') => page.locator(`#pane-${id}`);
+  const splitter = (page: Page, name: string) => page.getByRole('separator', { name, exact: true });
+  const widthOf = async (page: Page, id: 'palette' | 'editor' | 'inspector') =>
+    (await pane(page, id).boundingBox())!.width;
+
+  /** Drags a splitter by dx/dy pixels with the mouse, in small steps like a person would. */
+  async function drag(page: Page, name: string, dx: number, dy = 0) {
+    const box = (await splitter(page, name).boundingBox())!;
+    const x = box.x + box.width / 2;
+    const y = box.y + Math.min(box.height / 2, 200);
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + dx, y + dy, { steps: 8 });
+    await page.mouse.up();
+  }
+
+  /** View → Code editor beside / above the canvas. */
+  const editorPosition = async (page: Page, where: 'beside' | 'above') =>
+    (await openMenu(page, 'View'))
+      .getByRole('menuitemradio', { name: `Code editor ${where} the canvas` })
+      .click();
+
+  /** True when every node of the diagram is drawn inside the canvas. */
+  const allNodesInCanvas = (page: Page) =>
+    page.evaluate(() => {
+      const pane = document.querySelector('.react-flow')!.getBoundingClientRect();
+      return [...document.querySelectorAll('.react-flow__node')].every((el) => {
+        const b = el.getBoundingClientRect();
+        return (
+          b.left >= pane.left - 1 &&
+          b.top >= pane.top - 1 &&
+          b.right <= pane.right + 1 &&
+          b.bottom <= pane.bottom + 1
+        );
+      });
+    });
+
+  test('dragging the palette and editor splitters resizes them, and the sizes survive a reload', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await expect(page.locator('.react-flow__node')).toHaveCount(9);
+    const palette = await widthOf(page, 'palette');
+    const editor = await widthOf(page, 'editor');
+    expect(palette).toBeCloseTo(224, 0);
+
+    await drag(page, 'Resize palette', 80);
+    await expect.poll(() => widthOf(page, 'palette')).toBeCloseTo(palette + 80, 0);
+    await expect(splitter(page, 'Resize palette')).toHaveAttribute('aria-valuenow', '304');
+
+    await drag(page, 'Resize code editor', -100);
+    await expect.poll(() => widthOf(page, 'editor')).toBeCloseTo(editor - 100, 0);
+
+    await page.reload();
+    await expect(page.locator('.react-flow__node')).toHaveCount(9);
+    expect(await widthOf(page, 'palette')).toBeCloseTo(palette + 80, 0);
+    expect(await widthOf(page, 'editor')).toBeCloseTo(editor - 100, 0);
+
+    // A panel stops at its limits: the palette is 160-360px wide.
+    await drag(page, 'Resize palette', 400);
+    await expect.poll(() => widthOf(page, 'palette')).toBeCloseTo(360, 0);
+    // Dragging well past the minimum collapses it to a rail.
+    await drag(page, 'Resize palette', -320);
+    await expect(pane(page, 'palette')).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Show palette' })).toBeVisible();
+  });
+
+  test('a focused splitter resizes with the arrow keys, Shift, Home and End', async ({ page }) => {
+    await page.goto('/');
+    const handle = splitter(page, 'Resize palette');
+    await expect(handle).toHaveAttribute('aria-orientation', 'vertical');
+    await expect(handle).toHaveAttribute('aria-controls', 'pane-palette');
+    await handle.focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(handle).toHaveAttribute('aria-valuenow', '240');
+    await page.keyboard.press('Shift+ArrowRight');
+    await expect(handle).toHaveAttribute('aria-valuenow', '304');
+    await page.keyboard.press('ArrowLeft');
+    await expect(handle).toHaveAttribute('aria-valuenow', '288');
+    expect(await widthOf(page, 'palette')).toBeCloseTo(288, 0);
+    await page.keyboard.press('Home');
+    await expect(handle).toHaveAttribute('aria-valuenow', '160');
+    await page.keyboard.press('End');
+    await expect(handle).toHaveAttribute('aria-valuenow', '360');
+
+    // The inspector is on the other side: moving its splitter left (toward the canvas) widens it.
+    const inspector = splitter(page, 'Resize properties');
+    await inspector.focus();
+    await page.keyboard.press('ArrowLeft');
+    await expect(inspector).toHaveAttribute('aria-valuenow', '272');
+    await expect.poll(() => widthOf(page, 'inspector')).toBeCloseTo(272, 0);
+  });
+
+  test('panels collapse and come back from the toggle buttons, rails, double-click, Enter and shortcuts', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await expect(page.locator('.react-flow__node')).toHaveCount(9);
+    const toggle = page.getByRole('button', { name: 'Palette', exact: true });
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    await toggle.click();
+    await expect(pane(page, 'palette')).toBeHidden();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    // The collapsed palette leaves a rail that brings it back at the same width.
+    const rail = page.getByRole('button', { name: 'Show palette' });
+    expect((await rail.boundingBox())!.width).toBeCloseTo(32, 0);
+    await rail.click();
+    await expect(pane(page, 'palette')).toBeVisible();
+    expect(await widthOf(page, 'palette')).toBeCloseTo(224, 0);
+
+    // Double-click a splitter to collapse its panel, and again to restore it.
+    await splitter(page, 'Resize properties').dblclick();
+    await expect(pane(page, 'inspector')).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Show properties' })).toBeVisible();
+    await splitter(page, 'Resize properties').dblclick();
+    await expect(pane(page, 'inspector')).toBeVisible();
+
+    // Enter on a focused splitter does the same.
+    await splitter(page, 'Resize code editor').focus();
+    await page.keyboard.press('Enter');
+    await expect(pane(page, 'editor')).toBeHidden();
+    await page.keyboard.press('Enter');
+    await expect(pane(page, 'editor')).toBeVisible();
+
+    // Keyboard shortcuts, also while typing in the code editor.
+    await page.locator('.cm-content').click();
+    await page.keyboard.press('ControlOrMeta+Backslash');
+    await expect(pane(page, 'editor')).toBeHidden();
+    // Focus does not get lost on <body> when its panel goes away.
+    await expect(page.locator('.canvas')).toBeFocused();
+    await page.keyboard.press('ControlOrMeta+Backslash');
+    await expect(pane(page, 'editor')).toBeVisible();
+    await page.keyboard.press('ControlOrMeta+b');
+    await expect(pane(page, 'palette')).toBeHidden();
+    await page.keyboard.press('ControlOrMeta+Period');
+    await expect(pane(page, 'inspector')).toBeHidden();
+
+    // Collapsed panels stay collapsed after a reload.
+    await page.reload();
+    await expect(page.locator('.react-flow__node')).toHaveCount(9);
+    await expect(pane(page, 'palette')).toBeHidden();
+    await expect(pane(page, 'inspector')).toBeHidden();
+    await expect(pane(page, 'editor')).toBeVisible();
+
+    // The View menu shows and toggles them too.
+    const view = await openMenu(page, 'View');
+    const item = view.getByRole('menuitemcheckbox', { name: 'Properties' });
+    await expect(item).toHaveAttribute('aria-checked', 'false');
+    await item.click();
+    await expect(pane(page, 'inspector')).toBeVisible();
+    await expect(item).toHaveAttribute('aria-checked', 'true');
+  });
+
+  test('the command palette toggles panels and focus mode', async ({ page }) => {
+    await page.goto('/');
+    await page.keyboard.press('ControlOrMeta+K');
+    await page.getByRole('combobox', { name: 'Command palette' }).fill('toggle code');
+    await expect(
+      page.getByRole('listbox', { name: 'Command palette' }).getByRole('option').first(),
+    ).toContainText('Toggle code editor');
+    await page.keyboard.press('Enter');
+    await expect(pane(page, 'editor')).toBeHidden();
+
+    await page.keyboard.press('ControlOrMeta+K');
+    await page.getByRole('combobox', { name: 'Command palette' }).fill('focus canvas');
+    await page.keyboard.press('Enter');
+    await expect(pane(page, 'palette')).toBeHidden();
+    await expect(pane(page, 'inspector')).toBeHidden();
+  });
+
+  test('the editor can sit above the canvas, with a row splitter between them', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await expect(page.locator('.react-flow__node')).toHaveCount(9);
+    await editorPosition(page, 'above');
+    await expect(page.locator('.workspace')).toHaveAttribute('data-editor', 'above');
+
+    const editor = (await pane(page, 'editor').boundingBox())!;
+    const stage = (await page.locator('.stage').boundingBox())!;
+    // A vertical split: same column, editor on top.
+    expect(editor.y + editor.height).toBeLessThanOrEqual(stage.y + 1);
+    expect(editor.x).toBeCloseTo(stage.x, 0);
+    expect(editor.width).toBeCloseTo(stage.width, 0);
+    expect(editor.height).toBeCloseTo(240, 0);
+
+    const row = splitter(page, 'Resize code editor');
+    await expect(row).toHaveAttribute('aria-orientation', 'horizontal');
+    await drag(page, 'Resize code editor', 0, 80);
+    await expect
+      .poll(async () => (await pane(page, 'editor').boundingBox())!.height)
+      .toBeCloseTo(320, 0);
+    await row.focus();
+    await page.keyboard.press('ArrowUp');
+    await expect(row).toHaveAttribute('aria-valuenow', '304');
+
+    await page.reload();
+    await expect(page.locator('.workspace')).toHaveAttribute('data-editor', 'above');
+    expect((await pane(page, 'editor').boundingBox())!.height).toBeCloseTo(304, 0);
+
+    // Collapsed above the canvas, the editor leaves a horizontal rail.
+    await splitter(page, 'Resize code editor').dblclick();
+    const rail = (await page.getByRole('button', { name: 'Show code editor' }).boundingBox())!;
+    expect(rail.height).toBeCloseTo(32, 0);
+    expect(rail.width).toBeGreaterThan(300);
+
+    await editorPosition(page, 'beside');
+    await expect(page.locator('.workspace')).toHaveAttribute('data-editor', 'beside');
+  });
+
+  test('focus mode hides every side panel and Esc brings them back', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('.react-flow__node')).toHaveCount(9);
+    const before = (await page.locator('.react-flow').boundingBox())!;
+    await page.keyboard.press('ControlOrMeta+Shift+F');
+    for (const id of ['palette', 'editor', 'inspector'] as const)
+      await expect(pane(page, id)).toBeHidden();
+    await expect(page.locator('.pane-rail')).toHaveCount(0);
+    await expect(page.getByRole('separator')).toHaveCount(0);
+    await expect(page.getByRole('status')).toContainText('Esc');
+    const focusButton = page.getByRole('button', { name: 'Focus canvas' });
+    await expect(focusButton).toHaveAttribute('aria-pressed', 'true');
+    // The canvas gets the whole width.
+    await expect
+      .poll(async () => (await page.locator('.react-flow').boundingBox())!.width)
+      .toBeGreaterThan(before.width + 500);
+    await expect.poll(() => allNodesInCanvas(page)).toBe(true);
+
+    // It survives a reload, and Esc leaves it.
+    await page.reload();
+    await expect(page.locator('.react-flow__node')).toHaveCount(9);
+    await expect(pane(page, 'palette')).toBeHidden();
+    await page.keyboard.press('Escape');
+    for (const id of ['palette', 'editor', 'inspector'] as const)
+      await expect(pane(page, id)).toBeVisible();
+    await expect(page.getByRole('status')).not.toContainText('Esc');
+
+    // The stage bar button toggles it too.
+    await focusButton.click();
+    await expect(pane(page, 'editor')).toBeHidden();
+    await focusButton.click();
+    await expect(pane(page, 'editor')).toBeVisible();
+  });
+
+  test('Reset layout restores the default sizes and panels', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('.react-flow__node')).toHaveCount(9);
+    await drag(page, 'Resize palette', 60);
+    await drag(page, 'Resize code editor', 90);
+    await page.getByRole('button', { name: 'Properties', exact: true }).click();
+    await editorPosition(page, 'above');
+    await expect(pane(page, 'inspector')).toBeHidden();
+
+    await menuAction(page, 'View', 'Reset layout');
+    await expect(page.locator('.workspace')).toHaveAttribute('data-editor', 'beside');
+    await expect(pane(page, 'inspector')).toBeVisible();
+    expect(await widthOf(page, 'palette')).toBeCloseTo(224, 0);
+    expect(await widthOf(page, 'editor')).toBeCloseTo(360, 0);
+    expect(await widthOf(page, 'inspector')).toBeCloseTo(256, 0);
+    await page.reload();
+    expect(await widthOf(page, 'palette')).toBeCloseTo(224, 0);
+  });
+
+  test('in right-to-left layouts the panels mirror and dragging toward the canvas enlarges them', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.getByRole('combobox', { name: 'Language' }).selectOption('he');
+    await expect(page.locator('.app')).toHaveAttribute('dir', 'rtl');
+    const palette = (await pane(page, 'palette').boundingBox())!;
+    const editor = (await pane(page, 'editor').boundingBox())!;
+    const inspector = (await pane(page, 'inspector').boundingBox())!;
+    expect(palette.x).toBeGreaterThan(editor.x);
+    expect(editor.x).toBeGreaterThan(inspector.x);
+
+    // The palette is on the right, so dragging its splitter left (inward) widens it.
+    await drag(page, 'שינוי גודל לוח הרכיבים', -80);
+    await expect.poll(() => widthOf(page, 'palette')).toBeCloseTo(304, 0);
+    const box = (await pane(page, 'palette').boundingBox())!;
+    expect(box.x + box.width).toBeCloseTo(palette.x + palette.width, 0);
+    // Arrow keys follow the screen: ← moves the splitter left, which widens the palette here.
+    const handle = splitter(page, 'שינוי גודל לוח הרכיבים');
+    await handle.focus();
+    await page.keyboard.press('ArrowLeft');
+    await expect(handle).toHaveAttribute('aria-valuenow', '320');
+    await page.keyboard.press('ArrowRight');
+    await expect(handle).toHaveAttribute('aria-valuenow', '304');
+    // The inspector is on the left: dragging its splitter right widens it.
+    await drag(page, 'שינוי גודל המאפיינים', 40);
+    await expect.poll(() => widthOf(page, 'inspector')).toBeCloseTo(296, 0);
+  });
+
+  test('the canvas still fits the diagram after its panes are resized', async ({ page }) => {
+    // The desktop app's default window size.
+    await page.setViewportSize({ width: 1280, height: 760 });
+    await page.goto('/');
+    await expect(page.locator('.react-flow__node')).toHaveCount(9);
+    await expect.poll(() => allNodesInCanvas(page)).toBe(true);
+    const before = (await page.locator('.react-flow').boundingBox())!.width;
+
+    // A wider editor squeezes the canvas; it re-fits so nothing is cut off.
+    await drag(page, 'Resize code editor', 120);
+    await expect
+      .poll(async () => (await page.locator('.react-flow').boundingBox())!.width)
+      .toBeCloseTo(before - 120, 0);
+    await expect.poll(() => allNodesInCanvas(page)).toBe(true);
+
+    // The canvas never gets narrower than 280px, however far a splitter is dragged.
+    await drag(page, 'Resize code editor', 600);
+    expect((await page.locator('.react-flow').boundingBox())!.width).toBeGreaterThanOrEqual(279);
+    await expect.poll(() => allNodesInCanvas(page)).toBe(true);
+
+    await page.getByRole('button', { name: 'Palette', exact: true }).click();
+    await page.getByRole('button', { name: 'Properties', exact: true }).click();
+    await expect.poll(() => allNodesInCanvas(page)).toBe(true);
+  });
+
+  test('narrow windows start with the properties panel as a rail', async ({ page }) => {
+    await page.setViewportSize({ width: 1000, height: 700 });
+    await page.goto('/');
+    await expect(page.locator('.react-flow__node')).toHaveCount(9);
+    await expect(pane(page, 'inspector')).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Show properties' })).toBeVisible();
+    expect((await page.locator('.react-flow').boundingBox())!.width).toBeGreaterThanOrEqual(280);
+    // Opening it squeezes the editor rather than the canvas.
+    await page.getByRole('button', { name: 'Show properties' }).click();
+    await expect(pane(page, 'inspector')).toBeVisible();
+    expect((await page.locator('.react-flow').boundingBox())!.width).toBeGreaterThanOrEqual(279);
+    // No horizontal scrolling.
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      1000,
+    );
+  });
+});

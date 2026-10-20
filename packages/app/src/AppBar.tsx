@@ -4,6 +4,16 @@ import { LANGUAGES, chooseLanguage } from './i18n';
 import { UiIcon } from './Icon';
 import { IS_MAC, MenuButton, shortcut } from './Menu';
 import { THEME_PREFERENCES, setThemePreference, useTheme } from './theme';
+import {
+  PANE_IDS,
+  isOpen,
+  resetLayout,
+  setEditorPosition,
+  setFocusMode,
+  togglePane,
+  usePanes,
+} from './panes';
+import { PANE_SHORTCUTS } from './Workspace';
 
 export const THEME_ICONS = { light: 'sun', dark: 'moon', system: 'monitor' } as const;
 
@@ -26,6 +36,7 @@ interface Props {
 export function AppBar(p: Props) {
   const { t, i18n } = useTranslation();
   const theme = useTheme();
+  const { layout, narrow } = usePanes();
   return (
     <header className="appbar">
       <div className="appbar-start">
@@ -91,6 +102,51 @@ export function AppBar(p: Props) {
               hint: t('toolbar.legendHint'),
               checked: p.legend,
               onSelect: () => p.onLegend(!p.legend),
+            },
+          ]}
+        />
+        <MenuButton
+          label={t('panes.menu')}
+          entries={[
+            ...PANE_IDS.map((id) => ({
+              type: 'checkbox' as const,
+              id,
+              label: t(`panes.name.${id}`),
+              shortcut: shortcut(PANE_SHORTCUTS[id]),
+              checked: isOpen(layout, id, narrow),
+              onSelect: () => togglePane(id),
+            })),
+            { type: 'separator', id: 'sep-position' },
+            {
+              type: 'radio',
+              id: 'editor-beside',
+              label: t('panes.editorBeside'),
+              icon: 'columns-2',
+              checked: layout.editorPosition === 'beside',
+              onSelect: () => setEditorPosition('beside'),
+            },
+            {
+              type: 'radio',
+              id: 'editor-above',
+              label: t('panes.editorAbove'),
+              icon: 'rows-2',
+              checked: layout.editorPosition === 'above',
+              onSelect: () => setEditorPosition('above'),
+            },
+            { type: 'separator', id: 'sep-focus' },
+            {
+              type: 'checkbox',
+              id: 'focus',
+              label: t('panes.focus'),
+              shortcut: shortcut(PANE_SHORTCUTS.focus),
+              checked: layout.focus,
+              onSelect: () => setFocusMode(!layout.focus),
+            },
+            {
+              id: 'reset-layout',
+              label: t('panes.reset'),
+              icon: 'rotate-ccw',
+              onSelect: resetLayout,
             },
           ]}
         />

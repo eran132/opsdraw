@@ -130,6 +130,14 @@ On macOS, use Cmd instead of Ctrl. Canvas shortcuts apply while the canvas has f
 | Ctrl+S / Ctrl+Shift+S          | Save / save as                                                                               |
 | Ctrl+O                         | Open a file                                                                                  |
 | Shift+click / Shift+drag       | Add to the selection / draw a selection box                                                  |
+| Ctrl+K                         | Command palette                                                                              |
+| Ctrl+B                         | Show / hide the palette                                                                      |
+| Ctrl+\                         | Show / hide the code editor                                                                  |
+| Ctrl+.                         | Show / hide the properties panel                                                             |
+| Ctrl+Shift+F / Esc             | Focus mode (only the canvas) / leave it                                                      |
+| Arrow keys, Home, End, Enter   | On a focused panel divider: resize, smallest / largest size, collapse or restore             |
+
+Drag the dividers between the panels to resize them, or double-click one to collapse its panel; **View** in the app bar shows or hides each panel, puts the code editor beside or above the canvas, and resets the layout. The layout is remembered.
 
 Moving nodes (dragging, aligning, nudging) re-picks the attachment sides of their edges, so two nodes lined up get a straight edge.
 

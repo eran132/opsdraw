@@ -202,6 +202,30 @@ const zh: Messages = {
     toggleTheme: '切换深色模式',
     showView: '显示{{name}}',
   },
+  panes: {
+    menu: '视图',
+    name: { palette: '图标面板', editor: '代码编辑器', inspector: '属性' },
+    show: { palette: '显示图标面板', editor: '显示代码编辑器', inspector: '显示属性' },
+    hide: { palette: '隐藏图标面板', editor: '隐藏代码编辑器', inspector: '隐藏属性' },
+    toggle: {
+      palette: '显示/隐藏图标面板',
+      editor: '显示/隐藏代码编辑器',
+      inspector: '显示/隐藏属性',
+    },
+    resize: {
+      palette: '调整图标面板大小',
+      editor: '调整代码编辑器大小',
+      inspector: '调整属性大小',
+    },
+    resizeHint: '拖动或使用方向键调整大小。双击或按 Enter 折叠或还原。',
+    editorPosition: '代码编辑器位置',
+    editorBeside: '代码编辑器在画布旁边',
+    editorAbove: '代码编辑器在画布上方',
+    focus: '专注画布',
+    exitFocus: '退出专注模式',
+    focusStatus: '专注模式：按 Esc 重新显示面板。',
+    reset: '重置布局',
+  },
   status: { saved: '已保存', terraformImported: '已导入 {{count}} 个资源' },
 };
 

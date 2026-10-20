@@ -202,6 +202,39 @@ const ja: Messages = {
     toggleTheme: 'ダークモードを切り替え',
     showView: '{{name}} を表示',
   },
+  panes: {
+    menu: '表示',
+    name: { palette: 'パレット', editor: 'コードエディター', inspector: 'プロパティ' },
+    show: {
+      palette: 'パレットを表示',
+      editor: 'コードエディターを表示',
+      inspector: 'プロパティを表示',
+    },
+    hide: {
+      palette: 'パレットを非表示',
+      editor: 'コードエディターを非表示',
+      inspector: 'プロパティを非表示',
+    },
+    toggle: {
+      palette: 'パレットの表示切り替え',
+      editor: 'コードエディターの表示切り替え',
+      inspector: 'プロパティの表示切り替え',
+    },
+    resize: {
+      palette: 'パレットのサイズを変更',
+      editor: 'コードエディターのサイズを変更',
+      inspector: 'プロパティのサイズを変更',
+    },
+    resizeHint:
+      'ドラッグまたは矢印キーでサイズを変更します。ダブルクリックまたは Enter で折りたたみ・復元します。',
+    editorPosition: 'コードエディターの位置',
+    editorBeside: 'コードエディターをキャンバスの横に配置',
+    editorAbove: 'コードエディターをキャンバスの上に配置',
+    focus: 'キャンバスに集中',
+    exitFocus: '集中モードを終了',
+    focusStatus: '集中モード：Esc キーでパネルを再表示します。',
+    reset: 'レイアウトをリセット',
+  },
   status: {
     saved: '保存しました',
     terraformImported: '{{count}} 個のリソースをインポートしました',

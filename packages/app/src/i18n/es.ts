@@ -203,6 +203,39 @@ const es: Messages = {
     toggleTheme: 'Alternar modo oscuro',
     showView: 'Mostrar {{name}}',
   },
+  panes: {
+    menu: 'Ver',
+    name: { palette: 'Paleta', editor: 'Editor de código', inspector: 'Propiedades' },
+    show: {
+      palette: 'Mostrar la paleta',
+      editor: 'Mostrar el editor de código',
+      inspector: 'Mostrar las propiedades',
+    },
+    hide: {
+      palette: 'Ocultar la paleta',
+      editor: 'Ocultar el editor de código',
+      inspector: 'Ocultar las propiedades',
+    },
+    toggle: {
+      palette: 'Mostrar u ocultar la paleta',
+      editor: 'Mostrar u ocultar el editor de código',
+      inspector: 'Mostrar u ocultar las propiedades',
+    },
+    resize: {
+      palette: 'Cambiar el tamaño de la paleta',
+      editor: 'Cambiar el tamaño del editor de código',
+      inspector: 'Cambiar el tamaño de las propiedades',
+    },
+    resizeHint:
+      'Arrastra o usa las flechas para cambiar el tamaño. Doble clic o Intro para contraer o restaurar.',
+    editorPosition: 'Posición del editor de código',
+    editorBeside: 'Editor de código junto al lienzo',
+    editorAbove: 'Editor de código encima del lienzo',
+    focus: 'Enfocar el lienzo',
+    exitFocus: 'Salir del modo enfoque',
+    focusStatus: 'Modo enfoque: pulsa Esc para volver a mostrar los paneles.',
+    reset: 'Restablecer el diseño',
+  },
   status: { saved: 'Guardado', terraformImported: 'Se importaron {{count}} recursos' },
 };
 

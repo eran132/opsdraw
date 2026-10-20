@@ -201,6 +201,39 @@ const ar: Messages = {
     toggleTheme: 'تبديل الوضع الداكن',
     showView: 'عرض {{name}}',
   },
+  panes: {
+    menu: 'عرض',
+    name: { palette: 'لوحة العناصر', editor: 'محرر الشيفرة', inspector: 'الخصائص' },
+    show: {
+      palette: 'إظهار لوحة العناصر',
+      editor: 'إظهار محرر الشيفرة',
+      inspector: 'إظهار الخصائص',
+    },
+    hide: {
+      palette: 'إخفاء لوحة العناصر',
+      editor: 'إخفاء محرر الشيفرة',
+      inspector: 'إخفاء الخصائص',
+    },
+    toggle: {
+      palette: 'إظهار/إخفاء لوحة العناصر',
+      editor: 'إظهار/إخفاء محرر الشيفرة',
+      inspector: 'إظهار/إخفاء الخصائص',
+    },
+    resize: {
+      palette: 'تغيير حجم لوحة العناصر',
+      editor: 'تغيير حجم محرر الشيفرة',
+      inspector: 'تغيير حجم الخصائص',
+    },
+    resizeHint:
+      'اسحب أو استخدم مفاتيح الأسهم لتغيير الحجم. انقر نقرًا مزدوجًا أو اضغط Enter للطي والاستعادة.',
+    editorPosition: 'موضع محرر الشيفرة',
+    editorBeside: 'محرر الشيفرة بجانب اللوحة',
+    editorAbove: 'محرر الشيفرة فوق اللوحة',
+    focus: 'التركيز على اللوحة',
+    exitFocus: 'الخروج من وضع التركيز',
+    focusStatus: 'وضع التركيز: اضغط Esc لإظهار الألواح مرة أخرى.',
+    reset: 'إعادة تعيين التخطيط',
+  },
   status: { saved: 'تم الحفظ', terraformImported: 'تم استيراد {{count}} مورد' },
 };
 

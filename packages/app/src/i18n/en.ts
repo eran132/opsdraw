@@ -200,6 +200,31 @@ const en = {
     toggleTheme: 'Toggle dark mode',
     showView: 'Show {{name}}',
   },
+  panes: {
+    menu: 'View',
+    name: { palette: 'Palette', editor: 'Code editor', inspector: 'Properties' },
+    show: { palette: 'Show palette', editor: 'Show code editor', inspector: 'Show properties' },
+    hide: { palette: 'Hide palette', editor: 'Hide code editor', inspector: 'Hide properties' },
+    toggle: {
+      palette: 'Toggle palette',
+      editor: 'Toggle code editor',
+      inspector: 'Toggle properties',
+    },
+    resize: {
+      palette: 'Resize palette',
+      editor: 'Resize code editor',
+      inspector: 'Resize properties',
+    },
+    resizeHint:
+      'Drag or use the arrow keys to resize. Double-click or press Enter to collapse or restore.',
+    editorPosition: 'Code editor position',
+    editorBeside: 'Code editor beside the canvas',
+    editorAbove: 'Code editor above the canvas',
+    focus: 'Focus canvas',
+    exitFocus: 'Exit focus mode',
+    focusStatus: 'Focus mode: press Esc to show the panels again.',
+    reset: 'Reset layout',
+  },
   status: { saved: 'Saved', terraformImported: 'Imported {{count}} resources' },
 };
 
