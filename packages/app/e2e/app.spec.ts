@@ -335,6 +335,21 @@ test.describe('internationalization', () => {
     await page.getByRole('combobox', { name: 'שפה' }).selectOption('en');
     await expect(app).toHaveAttribute('dir', 'ltr');
   });
+
+  test.describe('on a Hebrew system', () => {
+    test.use({ locale: 'he-IL' });
+
+    test('starts in English until the user picks a language', async ({ page }) => {
+      // Undo the suite's English seed so the app sees a first launch on a Hebrew system.
+      await page.addInitScript(() => localStorage.removeItem('opsdraw:lang'));
+      await page.goto('/');
+      expect(await page.evaluate(() => navigator.language)).toBe('he-IL');
+      const app = page.locator('.app');
+      await expect(app).toHaveAttribute('lang', 'en');
+      await expect(app).toHaveAttribute('dir', 'ltr');
+      await expect(page.getByRole('combobox', { name: 'Language' })).toHaveValue('en');
+    });
+  });
 });
 
 test.describe('vendor icon packs', () => {

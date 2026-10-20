@@ -24,16 +24,13 @@ export const LANGUAGES = [
 const resources = { en, he, ar, es, fr, de, ja, zh };
 const supported = LANGUAGES.map((l) => l.code as string);
 
+/**
+ * English unless the user picked another language in the app (saved on change). The system
+ * language is deliberately not used: technical users often run a localized OS but work in English.
+ */
 function initialLanguage(): string {
   const saved = storage.get('lang');
-  if (saved && supported.includes(saved)) return saved;
-  for (const tag of navigator.languages ?? [navigator.language]) {
-    const base = tag.toLowerCase().split('-')[0]!;
-    // Browsers still report Hebrew as "iw" in some setups.
-    const code = base === 'iw' ? 'he' : base;
-    if (supported.includes(code)) return code;
-  }
-  return 'en';
+  return saved && supported.includes(saved) ? saved : 'en';
 }
 
 export const isRtlLanguage = (lang: string): boolean =>
